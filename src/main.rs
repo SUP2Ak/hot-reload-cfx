@@ -118,7 +118,7 @@ impl HotReloadApp {
         // Charger la configuration initiale
         if let Ok(config_str) = std::fs::read_to_string("server_config.json") {
             app.config = serde_json::from_str(&config_str).unwrap_or_default();
-            app.scan_resources(); // Scan initial
+            app.scan_resources();
         }
 
         // Démarrer le watcher si un chemin est configuré
@@ -126,24 +126,25 @@ impl HotReloadApp {
             let rt = app.runtime.clone();
             let status = app.connection_status.clone();
             
-            // Démarrer le watcher dans un thread séparé
-            std::thread::spawn(move || {
-                rt.block_on(async move {
-                    *status.lock().unwrap() = ConnectionStatus::Connecting;
-                    
-                    // Créer une instance de ResourceWatcher
-                    match ResourceWatcher::new(resources_path, "ws://localhost:3090").await {
-                        Ok(watcher) => {
-                            *status.lock().unwrap() = ConnectionStatus::Connected;
-                            if let Err(e) = watcher.watch().await {
-                                *status.lock().unwrap() = ConnectionStatus::Error(e.to_string());
-                            }
-                        },
-                        Err(e) => {
+            rt.spawn(async move {
+                *status.lock().unwrap() = ConnectionStatus::Connecting;
+                
+                match ResourceWatcher::new(resources_path, "ws://localhost:3090").await {
+                    Ok(watcher) => {
+                        println!("✅ Watcher créé avec succès");
+                        *status.lock().unwrap() = ConnectionStatus::Connected;
+                        
+                        // Garder le watcher en vie
+                        if let Err(e) = watcher.watch().await {
+                            println!("❌ Erreur du watcher: {}", e);
                             *status.lock().unwrap() = ConnectionStatus::Error(e.to_string());
                         }
+                    },
+                    Err(e) => {
+                        println!("❌ Erreur lors de la création du watcher: {}", e);
+                        *status.lock().unwrap() = ConnectionStatus::Error(e.to_string());
                     }
-                });
+                }
             });
         }
 
