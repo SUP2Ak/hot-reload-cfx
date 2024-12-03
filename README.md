@@ -6,74 +6,66 @@ Vous pouvez lire ce readme en français :
 
 A cross-platform desktop application built with Rust to monitor and hot reload FiveM resources.
 
-## Features (WIP)
+## Current Features
 
-- 🔄 Real-time resource monitoring
-- 🚀 Automatic hot reload
-- 📁 Resource file tree visualization
-- 🌐 WebSocket communication
-- 💻 Cross-platform support (Windows, Linux, MacOS)
-- 🎨 Modern UI with egui
+### Profile System
+- Multi-profile connection management
+- Default localhost profile (non-removable) without API key
+- Remote profiles with API key authentication
+- Simplified configuration without resources folder referencing
 
-## Installation (Only when a release is available)
+### Architecture
+- Clear separation between UI (client) / Watcher (server)
+- Integrated API key generator
+- Standalone watcher to place at server root
+- Automatic configuration on first launch
 
-1. Download the latest release for your operating system:
-   - Windows: hot-reload.exe
-   - Linux: hot-reload
-   - MacOS: hot-reload.app
+### Communication
+- Secure WebSocket for remote connections
+- Automatic authentication based on profile type
+- Real-time change detection
 
-Or build from source:
+## In Development
 
-1. Make sure you have Rust installed
-2. Clone this repository
-3. Run: `cargo build --release`
+### User Interface
+- [ ] Checkbox system to ignore/watch folders and files
+- [ ] Logs interface (watcher, application, resources)
+- [ ] User experience improvements
+- [ ] Advanced profile management
+
+### Watcher
+- [ ] Finalization of `handle_change`
+- [ ] Smart handling of fxmanifest modifications
+- [ ] Detection and processing of added/removed resources
+- [ ] Performance optimization
+
+### FiveM Resource
+- [ ] Improvement of internal commands execution
+- [ ] Detailed logs interface
+- [ ] Enhanced error handling
+
+## Installation
+
+1. Download the latest version
+2. For server: place the watcher at your FiveM server root
+3. For client: launch the UI application
+4. Configure your profiles according to your needs
 
 ## Usage
 
-1. Launch the application
-2. Click on "📂 Select Resources" to choose your FiveM resources folder
-3. The application will automatically:
-   - Scan for resources
-   - Display the resource tree
-   - Monitor for changes in .lua and .js files
-   - Hot reload modified resources
-
-## Configuration
-
-The application creates a server_config.json file to store:
-
-- Resources folder path
-- WebSocket connection settings
-
-## Technical Details
-
-- Built with Rust and eframe/egui
-- Uses tokio for async operations
-- WebSocket communication for hot reload
-- File system monitoring with notify
-- Supports .lua and .js files and maybe later .net.dll
-
-## Todo
-
-- [ ]  Improve error handling
-- [ ]  Add resource selection/deselection
-- [ ]  Customize WebSocket connection settings
-- [ ]  Review event handling
-- [ ]  Add logging interface
-- [ ]  Split into separate API service
+1. Start the watcher on your server
+2. Launch the client interface
+3. Select or create a profile
+4. Connect and start developing
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE.txt](LICENSE.txt) file for details.
+This project is under MIT license. See [LICENSE.txt](LICENSE.txt) file for more details.
 
 ## Contributors
 
 - [@sup2ak](https://github.com/sup2ak)
 
-## Issues
+## Support
 
-If you encounter any issues or have suggestions for improvements, please open an issue on the [GitHub repository](https://github.com/sup2ak/fivem-hot-reload/issues).
-
-## Pull Requests
-
-We welcome contributions to improve the project. Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to submit improvements and bug fixes.
+To report a bug or suggest an improvement, please open an issue on GitHub.

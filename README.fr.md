@@ -6,61 +6,57 @@ You can read this readme in English:
 
 Une application de bureau multiplateforme construite avec Rust pour surveiller et recharger à chaud les ressources FiveM.
 
-## Fonctionnalités (En Développement)
+## Fonctionnalités Actuelles
 
-- 🔄 Surveillance des ressources en temps réel
-- 🚀 Rechargement automatique à chaud
-- 📁 Visualisation de l'arborescence des ressources
-- 🌐 Communication WebSocket
-- 💻 Support multiplateforme (Windows, Linux, MacOS)
-- 🎨 Interface moderne avec egui
+### Système de Profils
+- Gestion multi-profils de connexion
+- Profil localhost par défaut (non supprimable) sans API key
+- Profils distants avec authentification par API key
+- Configuration simplifiée sans référencement du dossier resources
 
-## Installation (Uniquement lorsqu'une version sera disponible)
+### Architecture
+- Séparation claire UI (client) / Watcher (server)
+- Générateur d'API key intégré
+- Watcher autonome à placer à la racine du serveur
+- Configuration automatique au premier lancement
 
-1. Téléchargez la dernière version pour votre système d'exploitation :
-   - Windows : hot-reload.exe
-   - Linux : hot-reload
-   - MacOS : hot-reload.app
+### Communication
+- WebSocket sécurisé pour les connexions distantes
+- Authentification automatique selon le type de profil
+- Détection en temps réel des changements
 
-Ou compilez depuis les sources :
+## En Développement
 
-1. Assurez-vous d'avoir Rust installé
-2. Clonez ce dépôt
-3. Exécutez : `cargo build --release`
+### Interface Utilisateur
+- [ ] Système de checkbox pour ignorer/surveiller dossiers et fichiers
+- [ ] Interface de logs (watcher, application, ressources)
+- [ ] Amélioration de l'expérience utilisateur
+- [ ] Gestion avancée des profils
+
+### Watcher
+- [ ] Finalisation du `handle_change`
+- [ ] Gestion intelligente des modifications de fxmanifest
+- [ ] Détection et traitement des ressources ajoutées/supprimées
+- [ ] Optimisation des performances
+
+### Ressource FiveM
+- [ ] Amélioration de l'exécution des commandes internes
+- [ ] Interface de logs détaillée
+- [ ] Gestion des erreurs améliorée
+
+## Installation
+
+1. Téléchargez la dernière version
+2. Pour le serveur : placez le watcher à la racine de votre serveur FiveM
+3. Pour le client : lancez l'application UI
+4. Configurez vos profils selon vos besoins
 
 ## Utilisation
 
-1. Lancez l'application
-2. Cliquez sur "📂 Sélectionner les Ressources" pour choisir votre dossier de ressources FiveM
-3. L'application va automatiquement :
-   - Scanner les ressources
-   - Afficher l'arborescence des ressources
-   - Surveiller les changements dans les fichiers .lua et .js
-   - Recharger à chaud les ressources modifiées
-
-## Configuration
-
-L'application crée un fichier server_config.json pour stocker :
-
-- Le chemin du dossier des ressources
-- Les paramètres de connexion WebSocket
-
-## Détails Techniques
-
-- Construit avec Rust et eframe/egui
-- Utilise tokio pour les opérations asynchrones
-- Communication WebSocket pour le rechargement à chaud
-- Surveillance du système de fichiers avec notify
-- Supporte les fichiers .lua et .js et peut-être plus tard .net.dll
-
-## À Faire
-
-- [ ] Améliorer la gestion des erreurs
-- [ ] Ajouter la sélection/désélection des ressources
-- [ ] Personnaliser les paramètres de connexion WebSocket
-- [ ] Revoir la gestion des événements
-- [ ] Ajouter une interface de journalisation
-- [ ] Séparer en service API distinct
+1. Démarrez le watcher sur votre serveur
+2. Lancez l'interface client
+3. Sélectionnez ou créez un profil
+4. Connectez-vous et commencez à développer
 
 ## Licence
 
@@ -70,10 +66,6 @@ Ce projet est sous licence MIT. Voir le fichier [LICENSE.txt](LICENSE.txt) pour 
 
 - [@sup2ak](https://github.com/sup2ak)
 
-## Problèmes
+## Support
 
-Si vous rencontrez des problèmes ou avez des suggestions d'amélioration, veuillez ouvrir une issue sur le [dépôt GitHub](https://github.com/sup2ak/fivem-hot-reload/issues).
-
-## Pull Requests
-
-Nous accueillons les contributions pour améliorer le projet. Veuillez consulter notre [CONTRIBUTING.md](CONTRIBUTING.fr.md) pour les directives sur la soumission d'améliorations et de corrections de bugs.
+Pour signaler un bug ou proposer une amélioration, veuillez ouvrir une issue sur GitHub.
