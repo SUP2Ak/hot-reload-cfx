@@ -1,0 +1,20 @@
+[package]
+name = "hot-reload-ui"
+version = "0.1.0"
+author = "SUP2Ak"
+edition = "2021"
+
+[dependencies]
+hot-reload-common = { path = "../hot-reload-common" }
+eframe = "0.26"
+egui = "0.26"
+image = "0.24"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.21", features = ["connect"] }
+futures-util = "0.3"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+rfd = "0.13"
+walkdir = "2.4"
