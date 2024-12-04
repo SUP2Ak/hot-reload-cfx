@@ -1,5 +1,6 @@
 use serde::{Serialize, Deserialize};
 use std::path::PathBuf;
+use crate::utils::Language;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ConnectionProfile {
@@ -14,6 +15,8 @@ pub struct ServerConfig {
     pub resources_path: Option<PathBuf>,
     pub current_profile: Option<String>,
     pub profiles: Vec<ConnectionProfile>,
+    pub language: Language,
+    pub theme: String,
 }
 
 impl ConnectionProfile {
@@ -39,6 +42,8 @@ impl Default for ServerConfig {
                 api_key: String::new(),
                 is_local: true,
             }],
+            language: Language::English,
+            theme: "dark".to_string(),
         }
     }
 }
@@ -49,7 +54,6 @@ impl ServerConfig {
     }
 
     pub fn remove_profile(&mut self, name: &str) {
-        // Ne pas supprimer le profil local
         if let Some(profile) = self.profiles.iter().find(|p| p.name == name) {
             if profile.is_local {
                 return;
