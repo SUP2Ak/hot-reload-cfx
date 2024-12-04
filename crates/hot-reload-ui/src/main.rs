@@ -1,4 +1,5 @@
 mod app;
+mod utils;
 
 use app::HotReloadApp;
 use eframe::egui;
@@ -10,7 +11,7 @@ fn main() -> Result<(), eframe::Error> {
         .expect("Erreur lors du chargement de l'icône!")
         .into_rgba8();
     let (width, height) = icon.dimensions();
-    
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1280.0, 720.0])
@@ -26,6 +27,9 @@ fn main() -> Result<(), eframe::Error> {
     eframe::run_native(
         "FiveM Hot Reload",
         options,
-        Box::new(|cc| Box::new(HotReloadApp::new(cc))),
+        Box::new(|cc| {
+            egui_extras::install_image_loaders(&cc.egui_ctx);
+            Box::new(HotReloadApp::new(cc))
+        }),
     )
 }
