@@ -93,6 +93,6 @@ export class HotReloadServer {
   }
 }
 
-const HOT_RELOAD_PORT = GetConvar('hot_reload_port', '3091');
+const HOT_RELOAD_PORT = GetConvar('hot::ws::port', '3091');
 const WATCHER_API = new HotReloadServer(parseInt(HOT_RELOAD_PORT));
 export default WATCHER_API;
