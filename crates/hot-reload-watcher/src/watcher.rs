@@ -316,7 +316,7 @@ async fn handle_connection(stream: TcpStream, config: &Arc<WatcherConfig>) -> Re
 }
 
 async fn connect_to_fxserver(config: &WatcherConfig) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, BoxError> {
-    let fivem_url = format!("ws://localhost:{}", config.fivem_port);
+    let fivem_url = format!("ws://localhost:{}", config.fxserver_port);
     info!("🔌 Trying to connect to FXserver on {}", fivem_url);
     let (ws_stream, _) = connect_async(&fivem_url).await?;
     info!("✅ FXserver connection established!");
