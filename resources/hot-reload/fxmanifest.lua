@@ -1,0 +1,11 @@
+fx_version 'cerulean'
+author 'SUP2Ak'
+game 'gta5'
+lua54 'yes'
+use_experimental_fxv2_oal 'yes'
+repository 'https://github.com/SUP2Ak/hot-reload-fivem'
+description 'Hot Reload for FiveM'
+license 'MIT'
+version '1.0.0'
+
+server_script 'dist/server.js'
