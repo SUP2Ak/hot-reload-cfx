@@ -24,12 +24,12 @@ export class HotReloadServer {
     return this.wss?.address() !== null;
   }
 
-  private setupWebSocket() {
-    this.wss.on('connection', (ws: WebSocket) => {
+  private setupWebSocket(): void {
+    this.wss.on('connection', (ws: WebSocket): void => {
       console.log('^2New connection to Hot Reload^0');
       this.clients.add(ws);
 
-      ws.on('message', async (data: any) => {
+      ws.on('message', async (data: any): Promise<void> => {
         try {
           const change: ResourceChange = JSON.parse(data.toString());
           await this.handleResourceChange(change);
@@ -38,17 +38,17 @@ export class HotReloadServer {
         }
       });
 
-      ws.on('close', () => {
+      ws.on('close', (): void => {
         this.clients.delete(ws);
         console.log('^3Client Hot Reload disconnected^0');
       });
     });
   }
 
-  private sendMessageToWatcher(message: string) {
+  private sendMessageToWatcher(message: string): void {
     // const date = new Date().toLocaleString(this.locale, { hour12: false });
 
-    this.wss.clients.forEach((client: WebSocket) => {
+    this.wss.clients.forEach((client: WebSocket): void => {
       if (client.readyState === WebSocket.OPEN) {
         // client.send(`[${date}] - ${message}`);
         client.send(message);
@@ -56,7 +56,7 @@ export class HotReloadServer {
     });
   }
 
-  private async handleResourceChange(change: ResourceChange) {
+  private async handleResourceChange(change: ResourceChange): Promise<void> {
     const { resource_name, change_type } = change;
 
     //console.log(`^3Changement détecté dans ${resource_name}: ${change_type} - ${file_path}^0`);
@@ -93,6 +93,6 @@ export class HotReloadServer {
   }
 }
 
-const HOT_RELOAD_PORT = GetConvar('hot::ws::port', '3091');
-const WATCHER_API = new HotReloadServer(parseInt(HOT_RELOAD_PORT));
+// set hot::ws::port integer (in server.cfg)
+const WATCHER_API = new HotReloadServer(GetConvarInt('hot::ws::port', 3091)); 
 export default WATCHER_API;
