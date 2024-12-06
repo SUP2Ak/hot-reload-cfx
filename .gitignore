@@ -1,3 +1,4 @@
 /target/
+/release/
 Cargo.lock
 server_config.json
