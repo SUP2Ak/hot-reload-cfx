@@ -5,12 +5,11 @@ use std::process::Command;
 use std::env;
 
 fn main() {
-    // Demander à l'utilisateur ce qu'il veut builder
-    println!("Que voulez-vous builder ?");
+    println!("What do you want to build ?");
     println!("1. UI (Windows, Linux, MacOS)");
     println!("2. Watcher (Windows, Linux)");
     println!("3. FX Server Resource");
-    println!("4. Tout");
+    println!("4. All");
     
     let mut input = String::new();
     std::io::stdin().read_line(&mut input).unwrap();
@@ -24,7 +23,7 @@ fn main() {
             build_watcher();
             build_fxserver();
         }
-        _ => println!("Option invalide")
+        _ => println!("Invalid option")
     }
 }
 
