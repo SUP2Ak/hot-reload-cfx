@@ -20,7 +20,7 @@ pub struct ServerConfig {
 }
 
 impl ConnectionProfile {
-    pub fn new(name: String, ws_url: String, api_key: String) -> Self {
+    fn new(name: String, ws_url: String, api_key: String) -> Self {
         let is_local = ws_url.contains("localhost") || ws_url.contains("127.0.0.1");
         Self {
             name,
