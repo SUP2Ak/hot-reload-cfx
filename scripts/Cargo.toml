@@ -1,0 +1,12 @@
+[package]
+name = "build-script"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "build"
+path = "build.rs"
+
+[dependencies]
+zip = "0.6"
+walkdir = "2.3"
