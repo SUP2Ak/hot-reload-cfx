@@ -1,10 +1,10 @@
 mod config;
-mod ui;
+mod render;
 
 use crate::utils::{generate_api_key, Translator};
 use tokio::runtime::Runtime;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
-use tracing::info;
+use tracing::{info, error};
 use chrono::Local;
 use config::ServerConfig;
 use eframe::egui::ImageSource;
@@ -14,10 +14,11 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
-use hot_reload_common::{AuthRequest, AuthResponse, ChangeType, InitialData, ResourceChange};
+use std::collections::VecDeque;
+use hot_reload_common::{AuthRequest, AuthResponse, InitialData};
 
 #[derive(Clone, PartialEq)]
-pub enum ConnectionStatus {
+enum ConnectionStatus {
     Disconnected,
     #[allow(dead_code)]
     Connecting,
@@ -45,6 +46,9 @@ pub struct HotReloadApp {
     translator: Translator,
     is_connected: bool,
     theme: Theme,
+    logs: Arc<Mutex<VecDeque<String>>>,
+    pending_messages: Arc<Mutex<Vec<String>>>,
+    last_update: Arc<Mutex<std::time::Instant>>,
 }
 
 #[derive(Default, Clone, Serialize, Debug)]
@@ -53,12 +57,21 @@ struct ResourceTreeState {
     checked: HashMap<String, bool>,
 }
 
-pub struct FileIcons {
+struct FileIcons {
     lua: ImageSource<'static>,
     javascript: ImageSource<'static>,
     csharp: ImageSource<'static>,
     default: ImageSource<'static>,
 }
+
+
+#[derive(Debug, serde::Serialize)]
+struct DebugResourceData {
+    resources: HashMap<String, Vec<String>>,
+    tree_state: ResourceTreeState,
+    timestamp: String,
+}
+
 
 impl HotReloadApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
@@ -113,6 +126,9 @@ impl HotReloadApp {
             translator,
             theme: Theme::Dark,
             is_connected: false,
+            logs: Arc::new(Mutex::new(VecDeque::with_capacity(100))),
+            pending_messages: Arc::new(Mutex::new(Vec::with_capacity(100))),
+            last_update: Arc::new(Mutex::new(std::time::Instant::now())),
         };
 
         if let Ok(config_str) = std::fs::read_to_string("server_config.json") {
@@ -147,183 +163,157 @@ impl HotReloadApp {
         let status = self.connection_status.clone();
         let resource_tree = self.resource_tree.clone();
         let resources_path = self.resources_path.clone();
-        let tr = self.translator.clone();
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        let connected_message = tr.t("connected_websocket").to_string();
+        let logs = self.logs.clone();
+        let pending_messages = self.pending_messages.clone();
 
         rt.spawn(async move {
+            info!("🔌 Tentative de connexion à {}", ws_url);
             match connect_async(&ws_url).await {
                 Ok((mut ws_stream, _)) => {
-                    let is_localhost = ws_url.contains("localhost") || ws_url.contains("127.0.0.1");
-
-                    if !is_localhost {
-                        if let Some(key) = api_key {
-                            let auth = AuthRequest { api_key: key };
-                            if let Ok(auth_msg) = serde_json::to_string(&auth) {
-                                if let Err(_) = ws_stream.send(Message::Text(auth_msg)).await {
-                                    *status.lock().unwrap() =
-                                        ConnectionStatus::Error(tr.t("error_auth"));
-                                    return;
+                    // Authentification si nécessaire
+                    if let Some(key) = api_key {
+                        let auth = AuthRequest { api_key: key };
+                        if let Ok(auth_msg) = serde_json::to_string(&auth) {
+                            if let Err(e) = ws_stream.send(Message::Text(auth_msg)).await {
+                                error!("❌ Erreur d'authentification: {}", e);
+                                if let Ok(mut status) = status.lock() {
+                                    *status = ConnectionStatus::Error(e.to_string());
                                 }
+                                return;
+                            }
 
-                                match ws_stream.next().await {
-                                    Some(Ok(msg)) => {
-                                        if let Ok(response) =
-                                            serde_json::from_str::<AuthResponse>(&msg.to_string())
-                                        {
-                                            match response {
-                                                AuthResponse::Failed(reason) => {
-                                                    *status.lock().unwrap() =
-                                                        ConnectionStatus::Error(reason);
-                                                    return;
+                            match ws_stream.next().await {
+                                Some(Ok(response)) => {
+                                    if let Ok(auth_response) = serde_json::from_str::<AuthResponse>(&response.to_string()) {
+                                        match auth_response {
+                                            AuthResponse::Failed(reason) => {
+                                                if let Ok(mut status) = status.lock() {
+                                                    *status = ConnectionStatus::Error(reason);
                                                 }
-                                                AuthResponse::Success => {
-                                                    info!("{}", tr.t("success_auth"));
-                                                }
+                                                return;
+                                            }
+                                            AuthResponse::Success => {
+                                                info!("✅ Authentification réussie");
                                             }
                                         }
                                     }
-                                    _ => {
-                                        *status.lock().unwrap() =
-                                            ConnectionStatus::Error(tr.t("error_auth_response"));
-                                        return;
-                                    }
+                                }
+                                _ => {
+                                    error!("❌ Pas de réponse d'authentification");
+                                    return;
                                 }
                             }
-                        } else {
-                            *status.lock().unwrap() =
-                                ConnectionStatus::Error(tr.t("error_auth_api_key"));
-                            return;
                         }
                     }
 
-                    *status.lock().unwrap() = ConnectionStatus::Connected;
-                    let _ = tx.send(true); // Envoyer l'état connecté
-                    info!("{}", connected_message);
+                    if let Ok(mut status) = status.lock() {
+                        *status = ConnectionStatus::Connected;
+                    }
 
+                    info!("📡 Connexion WebSocket établie");
+
+                    // Boucle de réception des messages
                     while let Some(msg) = ws_stream.next().await {
                         match msg {
-                            Ok(Message::Text(text)) => {
-                                if let Ok(initial_data) = serde_json::from_str::<InitialData>(&text)
-                                {
-                                    info!("{}", tr.t("init_data_received"));
-                                    *resources_path.lock().unwrap() =
-                                        Some(initial_data.resources_path);
-                                    let mut sorted_resources: Vec<(String, Vec<String>)> =
-                                        initial_data.resources.into_iter().collect();
-                                    sorted_resources.sort_by(|a, b| {
-                                        let a_name =
-                                            a.0.trim_start_matches(|c: char| !c.is_alphanumeric());
-                                        let b_name =
-                                            b.0.trim_start_matches(|c: char| !c.is_alphanumeric());
-                                        a_name.to_lowercase().cmp(&b_name.to_lowercase())
-                                    });
-                                    let sorted_map: HashMap<String, Vec<String>> = sorted_resources
-                                        .into_iter()
-                                        .map(|(name, mut files)| {
-                                            // Trier les fichiers: d'abord les fichiers racine, puis par dossier
-                                            files.sort_by(|a, b| {
-                                                let a_parts: Vec<&str> =
-                                                    a.split(&['/', '\\']).collect();
-                                                let b_parts: Vec<&str> =
-                                                    b.split(&['/', '\\']).collect();
-
-                                                match (a_parts.len(), b_parts.len()) {
-                                                    (1, 1) => {
-                                                        a.to_lowercase().cmp(&b.to_lowercase())
-                                                    }
-                                                    (1, _) => std::cmp::Ordering::Less,
-                                                    (_, 1) => std::cmp::Ordering::Greater,
-                                                    (_, _) => {
-                                                        if a_parts[0] == b_parts[0] {
-                                                            a.to_lowercase().cmp(&b.to_lowercase())
-                                                        } else {
-                                                            a_parts[0]
-                                                                .to_lowercase()
-                                                                .cmp(&b_parts[0].to_lowercase())
+                            Ok(msg) => {
+                                if let Ok(text) = msg.to_text() {
+                                    info!("📨 Message brut reçu: {}", text);
+                                    
+                                    // Essayer de parser en tant que données initiales
+                                    match serde_json::from_str::<InitialData>(text) {
+                                        Ok(initial_data) => {
+                                            info!("📥 Données initiales reçues avec succès");
+                                            info!("📂 Chemin des ressources: {}", initial_data.resources_path);
+                                            info!("📚 Nombre de ressources: {}", initial_data.resources.len());
+                                            Self::handle_initial_data(&resources_path, &resource_tree, initial_data).await;
+                                            continue;
+                                        }
+                                        Err(_) => {
+                                            // Essayer de parser en tant que message batch
+                                            match serde_json::from_str::<serde_json::Value>(text) {
+                                                Ok(json) => {
+                                                    info!("🔍 Type de message reçu: {}", json["type"]);
+                                                    if json["type"] == "batch" {
+                                                        if let Some(messages) = json["messages"].as_array() {
+                                                            info!("📦 Batch reçu avec {} messages", messages.len());
+                                                            let message_strings: Vec<String> = messages.iter()
+                                                                .filter_map(|msg| msg["message"].as_str().map(String::from))
+                                                                .collect();
+                                                            Self::process_message_batch(&message_strings, &logs, &pending_messages).await;
                                                         }
                                                     }
                                                 }
-                                            });
-                                            (name, files)
-                                        })
-                                        .collect();
-
-                                    *resource_tree.lock().unwrap() = sorted_map;
-                                } else if let Ok(change) =
-                                    serde_json::from_str::<ResourceChange>(&text)
-                                {
-                                    info!("{}", tr.t("change_received"));
-                                    if let Ok(mut tree) = resource_tree.lock() {
-                                        match change.change_type {
-                                            ChangeType::FileAdded | ChangeType::FileModified => {
-                                                if let Some(files) =
-                                                    tree.get_mut(&change.resource_name)
-                                                {
-                                                    if !files.contains(&change.file_path) {
-                                                        files.push(change.file_path);
-                                                        files.sort_by(|a, b| {
-                                                            let a_parts: Vec<&str> =
-                                                                a.split(&['/', '\\']).collect();
-                                                            let b_parts: Vec<&str> =
-                                                                b.split(&['/', '\\']).collect();
-
-                                                            match (a_parts.len(), b_parts.len()) {
-                                                                (1, 1) => a
-                                                                    .to_lowercase()
-                                                                    .cmp(&b.to_lowercase()),
-                                                                (1, _) => std::cmp::Ordering::Less,
-                                                                (_, 1) => {
-                                                                    std::cmp::Ordering::Greater
-                                                                }
-                                                                (_, _) => {
-                                                                    if a_parts[0] == b_parts[0] {
-                                                                        a.to_lowercase()
-                                                                            .cmp(&b.to_lowercase())
-                                                                    } else {
-                                                                        a_parts[0]
-                                                                            .to_lowercase()
-                                                                            .cmp(
-                                                                                &b_parts[0]
-                                                                                    .to_lowercase(),
-                                                                            )
-                                                                    }
-                                                                }
-                                                            }
-                                                        });
-                                                    }
-                                                }
-                                            }
-                                            ChangeType::FileRemoved => {
-                                                if let Some(files) =
-                                                    tree.get_mut(&change.resource_name)
-                                                {
-                                                    files.retain(|f| f != &change.file_path);
+                                                Err(e) => {
+                                                    error!("❌ Erreur de parsing JSON: {}", e);
                                                 }
                                             }
                                         }
                                     }
                                 }
                             }
-                            Ok(_) => {}
                             Err(e) => {
-                                info!("{}", tr.t("error_websocket"));
-                                *status.lock().unwrap() = ConnectionStatus::Error(e.to_string());
+                                error!("❌ Erreur WebSocket: {}", e);
+                                if let Ok(mut status) = status.lock() {
+                                    *status = ConnectionStatus::Error(e.to_string());
+                                }
                                 break;
                             }
                         }
                     }
                 }
                 Err(e) => {
-                    info!("{}", tr.t("error_websocket_connection"));
-                    *status.lock().unwrap() = ConnectionStatus::Error(e.to_string());
+                    error!("❌ Erreur de connexion: {}", e);
+                    if let Ok(mut status) = status.lock() {
+                        *status = ConnectionStatus::Error(e.to_string());
+                    }
                 }
             }
         });
+    }
 
-        // Mettre à jour l'état de connexion en dehors de la closure async
-        if let Ok(is_connected) = rx.blocking_recv() {
-            self.set_is_connected(is_connected);
+    async fn handle_initial_data(
+        resources_path: &Arc<Mutex<Option<String>>>,
+        resource_tree: &Arc<Mutex<HashMap<String, Vec<String>>>>,
+        initial_data: InitialData,
+    ) {
+        info!("🔄 Traitement des données initiales");
+        if let Ok(mut path) = resources_path.lock() {
+            *path = Some(initial_data.resources_path.clone());
+            info!("📂 Chemin des ressources mis à jour: {}", initial_data.resources_path);
+        }
+        if let Ok(mut tree) = resource_tree.lock() {
+            *tree = initial_data.resources.clone();
+            info!("🌳 Arbre des ressources mis à jour avec {} ressources", tree.len());
+        }
+    }
+
+    async fn process_message_batch(
+        messages: &[String],
+        logs: &Arc<Mutex<VecDeque<String>>>,
+        pending: &Arc<Mutex<Vec<String>>>,
+    ) {
+        info!("🔄 Traitement d'un batch de {} messages", messages.len());
+        if let Ok(mut pending_messages) = pending.lock() {
+            for message in messages {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(message) {
+                    if let Some(msg_type) = json.get("type") {
+                        if msg_type == "fivem_response" {
+                            if let Some(message) = json.get("message").and_then(|m| m.as_str()) {
+                                pending_messages.push(message.to_string());
+                                info!("📨 Message ajouté aux messages en attente: {}", message);
+                                
+                                if let Ok(mut logs) = logs.lock() {
+                                    if logs.len() >= 100 {
+                                        logs.pop_front();
+                                    }
+                                    logs.push_back(message.to_string());
+                                    info!("📝 Message ajouté aux logs");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -350,9 +340,7 @@ impl HotReloadApp {
         // Propager aux sous-dossiers
         for subfolder_name in subfolders {
             let subfolder_id = format!("{}/{}", parent, subfolder_name);
-            self.tree_state
-                .checked
-                .insert(subfolder_id.clone(), checked);
+            self.tree_state.checked.insert(subfolder_id.clone(), checked);
             self.propagate_check_state(&subfolder_id, checked);
         }
     }
@@ -363,22 +351,12 @@ impl HotReloadApp {
             if let Some(files) = tree.get(parent) {
                 let all_checked = files.iter().all(|file| {
                     let file_id = format!("{}/{}", parent, file);
-                    self.tree_state
-                        .checked
-                        .get(&file_id)
-                        .copied()
-                        .unwrap_or(true)
+                    self.tree_state.checked.get(&file_id).copied().unwrap_or(true)
                 }) && tree.iter().all(|(name, _)| {
                     let subfolder_id = format!("{}/{}", parent, name);
-                    self.tree_state
-                        .checked
-                        .get(&subfolder_id)
-                        .copied()
-                        .unwrap_or(true)
+                    self.tree_state.checked.get(&subfolder_id).copied().unwrap_or(true)
                 });
-                self.tree_state
-                    .checked
-                    .insert(parent.to_string(), all_checked);
+                self.tree_state.checked.insert(parent.to_string(), all_checked);
             }
         }
     }
@@ -391,9 +369,7 @@ impl HotReloadApp {
         let new_state = !self.all_checked();
         if let Ok(tree) = self.resource_tree.lock() {
             for (resource_name, files) in tree.iter() {
-                self.tree_state
-                    .checked
-                    .insert(resource_name.clone(), new_state);
+                self.tree_state.checked.insert(resource_name.clone(), new_state);
                 for file in files {
                     let file_id = format!("{}/{}", resource_name, file);
                     self.tree_state.checked.insert(file_id, new_state);
@@ -424,303 +400,8 @@ impl HotReloadApp {
     }
 }
 
-#[derive(Debug, serde::Serialize)]
-struct DebugResourceData {
-    resources: HashMap<String, Vec<String>>,
-    tree_state: ResourceTreeState,
-    timestamp: String,
-}
-
 impl App for HotReloadApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Menu strip on top
-        egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.menu_button(self.translator.t("folder"), |ui| {
-                    if ui.button(self.translator.t("reload_config")).clicked() {
-                        if let Ok(config_str) = std::fs::read_to_string("server_config.json") {
-                            self.config = serde_json::from_str(&config_str).unwrap_or_default();
-                            ui.close_menu();
-                        }
-                    }
-                    if ui.button(self.translator.t("save")).clicked() {
-                        self.save_config();
-                        ui.close_menu();
-                    }
-                    ui.separator();
-                    if ui.button(self.translator.t("quit")).clicked() {
-                        std::process::exit(0);
-                    }
-                });
-
-                ui.menu_button(self.translator.t("tools"), |ui| {
-                    ui.separator();
-                    if ui.button(self.translator.t("generate_api_key")).clicked() {
-                        let api_key = generate_api_key();
-                        self.new_profile_api_key = api_key;
-                        self.show_api_key_popup = true;
-                        ui.close_menu();
-                    }
-                });
-
-                ui.menu_button(self.translator.t("affichage"), |ui| {
-                    ui.checkbox(
-                        &mut self.show_ignored_files,
-                        self.translator.t("ignore_files"),
-                    );
-                    ui.separator();
-                    ui.menu_button(self.translator.t("theme"), |ui| {
-                        let current_theme = self.config.theme.clone();
-                        
-                        if ui.selectable_label(current_theme == "light", self.translator.t("light")).clicked() {
-                            ctx.set_visuals(egui::Visuals::light());
-                            self.config.theme = "light".to_string();
-                            if let Ok(config_json) = serde_json::to_string_pretty(&self.config) {
-                                let _ = std::fs::write("server_config.json", config_json);
-                            }
-                            ui.close_menu();
-                        }
-                        
-                        if ui.selectable_label(current_theme == "dark", self.translator.t("dark")).clicked() {
-                            ctx.set_visuals(egui::Visuals::dark());
-                            self.config.theme = "dark".to_string();
-                            if let Ok(config_json) = serde_json::to_string_pretty(&self.config) {
-                                let _ = std::fs::write("server_config.json", config_json);
-                            }
-                            ui.close_menu();
-                        }
-                    });
-                    ui.separator();
-                    ui.menu_button(self.translator.t("language"), |ui| {
-                        for language in Translator::available_languages() {
-                            let is_selected = self.translator.get_language() == language;
-                            if ui.selectable_label(is_selected, format!("{:?}", language)).clicked() {
-                                self.translator.set_language(language).unwrap_or_default();
-                                self.config.language = language;
-                                if let Ok(config_json) = serde_json::to_string_pretty(&self.config) {
-                                    let _ = std::fs::write("server_config.json", config_json);
-                                }
-                                ui.close_menu();
-                            }
-                        }
-                    });
-                });
-
-                ui.menu_button(self.translator.t("help"), |ui| {
-                    if ui.button(self.translator.t("documentation")).clicked() {
-                        // TODO: Ouvrir la doc
-                        ui.close_menu();
-                    }
-                    if ui.button(self.translator.t("report_bug")).clicked() {
-                        // TODO: Ouvrir GitHub Issues
-                        ui.close_menu();
-                    }
-                    ui.separator();
-                    if ui.button(self.translator.t("about")).clicked() {
-                        self.show_about_popup = true;
-                        ui.close_menu();
-                    }
-                });
-            });
-        });
-
-        // Task bar on top
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(self.translator.t("profile"));
-                let current_profile = self.config.current_profile.clone();
-                egui::ComboBox::from_label("")
-                    .selected_text(
-                        self.config
-                            .get_current_profile()
-                            .map(|p| p.name.clone())
-                            .unwrap_or_else(|| self.translator.t("profile_select")),
-                    )
-                    .show_ui(ui, |ui| {
-                        for profile in &self.config.profiles {
-                            ui.selectable_value(
-                                &mut self.config.current_profile,
-                                Some(profile.name.clone()),
-                                &profile.name,
-                            );
-                        }
-                    });
-                if ui.button("➕").clicked() {
-                    self.show_add_profile_popup = true;
-                }
-                if let Some(current) = &self.config.current_profile {
-                    if let Some(profile) = self.config.get_current_profile() {
-                        if !profile.is_local {
-                            if ui.button("🗑").clicked() {
-                                let mut config = self.config.clone();
-                                config.remove_profile(current);
-                                self.config = config;
-                                self.config.current_profile = None;
-                                self.save_config();
-                            }
-                        }
-                    }
-                }
-                ui.separator();
-                if let Some(current_name) = &current_profile {
-                    if let Some(profile) = self.config.get_current_profile() {
-                        let mut ws_url = profile.ws_url.clone();
-                        let mut api_key = profile.api_key.clone();
-                        let is_local = profile.is_local;
-
-                        ui.label("WebSocket URL:");
-                        let text_edit = egui::TextEdit::singleline(&mut ws_url)
-                            .hint_text("ws://ip:port")
-                            .desired_width(200.0);
-
-                        let ws_changed = ui.add(text_edit).changed();
-                        let mut api_changed = false;
-
-                        if !is_local {
-                            ui.label("API Key:");
-                            let api_key_edit = egui::TextEdit::singleline(&mut api_key)
-                                .password(true)
-                                .hint_text(self.translator.t("profile_api_key_placeholder"))
-                                .desired_width(200.0);
-
-                            api_changed = ui.add(api_key_edit).changed();
-                        }
-
-                        if ws_changed || api_changed {
-                            if let Some(profile) = self
-                                .config
-                                .profiles
-                                .iter_mut()
-                                .find(|p| p.name == *current_name)
-                            {
-                                if ws_changed {
-                                    profile.ws_url = ws_url.clone();
-                                }
-                                if api_changed {
-                                    profile.api_key = api_key.clone();
-                                }
-                                self.save_config();
-                            }
-                        }
-
-                        if ui.button(self.translator.t("login")).clicked() {
-                            let api_key = if !is_local {
-                                Some(api_key.clone())
-                            } else {
-                                None
-                            };
-                            self.start_websocket(ws_url.clone(), api_key);
-                        }
-
-                        let status = self.connection_status.lock().unwrap().clone();
-                        match status {
-                            ConnectionStatus::Disconnected => {
-                                ui.label(
-                                    egui::RichText::new(self.translator.t("disconnected"))
-                                        .color(egui::Color32::GRAY),
-                                );
-                            }
-                            ConnectionStatus::Connecting => {
-                                ui.label(
-                                    egui::RichText::new(self.translator.t("connecting"))
-                                        .color(egui::Color32::YELLOW),
-                                );
-                            }
-                            ConnectionStatus::Connected => {
-                                ui.label(
-                                    egui::RichText::new(self.translator.t("connected"))
-                                        .color(egui::Color32::GREEN),
-                                );
-                            }
-                            ConnectionStatus::Error(err) => {
-                                ui.label(
-                                    egui::RichText::new(format!(
-                                        "{}: {}",
-                                        self.translator.t("error_connection"),
-                                        err
-                                    ))
-                                    .color(egui::Color32::RED),
-                                );
-                            }
-                        }
-                    }
-                }
-            });
-        });
-
-        if self.show_add_profile_popup {
-            egui::Window::new(self.translator.t("profile_new"))
-                .collapsible(false)
-                .resizable(false)
-                .show(ctx, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(self.translator.t("name"));
-                        ui.add(
-                            egui::TextEdit::singleline(&mut self.new_profile_name)
-                                .hint_text(self.translator.t("profile_name_placeholder"))
-                        );
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("URL:");
-                        ui.add(
-                            egui::TextEdit::singleline(&mut self.new_profile_url)
-                                .hint_text(self.translator.t("profile_url_placeholder"))
-                        );
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("API Key:");
-                        ui.add(
-                            egui::TextEdit::singleline(&mut self.new_profile_api_key)
-                                .password(true)
-                                .hint_text(self.translator.t("profile_api_key_placeholder")),
-                        );
-                    });
-                    ui.horizontal(|ui| {
-                        if ui.button(self.translator.t("cancel")).clicked() {
-                            self.show_add_profile_popup = false;
-                            self.new_profile_name.clear();
-                            self.new_profile_url.clear();
-                            self.new_profile_api_key.clear();
-                        }
-                        if ui.button(self.translator.t("add")).clicked() {
-                            if !self.new_profile_name.is_empty() && !self.new_profile_url.is_empty()
-                            {
-                                self.config.add_profile(
-                                    self.new_profile_name.clone(),
-                                    self.new_profile_url.clone(),
-                                    self.new_profile_api_key.clone(),
-                                );
-                                self.config.current_profile = Some(self.new_profile_name.clone());
-                                self.save_config();
-                                self.show_add_profile_popup = false;
-                                self.new_profile_name.clear();
-                                self.new_profile_url.clear();
-                                self.new_profile_api_key.clear();
-                            }
-                        }
-                    });
-                });
-        }
-
-        if self.show_api_key_popup {
-            egui::Window::new("API Key")
-                .collapsible(false)
-                .resizable(false)
-                .show(ctx, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label("API Key :");
-                        ui.monospace(&self.new_profile_api_key);
-                        if ui.small_button("📋").clicked() {
-                            ui.ctx().copy_text(self.new_profile_api_key.clone().into());
-                        }
-                    });
-                    if ui.button(self.translator.t("close")).clicked() {
-                        self.show_api_key_popup = false;
-                    }
-                });
-        }
-
-        // Display main content
-        self.render_main_content(ctx);
+        self.render(ctx);
     }
 }
