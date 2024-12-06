@@ -225,7 +225,7 @@ do {
             Build-FXServer
         }
         "5" { 
-            Write-Host "`n👋 Au revoir!" -ForegroundColor Cyan
+            Write-Host "`n👋 Bye!" -ForegroundColor Cyan
             exit 
         }
         default { Write-Host "`n❌ Invalid option" -ForegroundColor Red }
