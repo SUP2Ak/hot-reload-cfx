@@ -126,5 +126,77 @@ impl HotReloadApp {
                 }
             });
         });
+
+        if self.show_add_profile_popup {
+            egui::Window::new(self.translator.t("profile_new"))
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(self.translator.t("name"));
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.new_profile_name)
+                                .hint_text(self.translator.t("profile_name_placeholder"))
+                        );
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("URL:");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.new_profile_url)
+                                .hint_text(self.translator.t("profile_url_placeholder"))
+                        );
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("API Key:");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.new_profile_api_key)
+                                .password(true)
+                                .hint_text(self.translator.t("profile_api_key_placeholder")),
+                        );
+                    });
+                    ui.horizontal(|ui| {
+                        if ui.button(self.translator.t("cancel")).clicked() {
+                            self.show_add_profile_popup = false;
+                            self.new_profile_name.clear();
+                            self.new_profile_url.clear();
+                            self.new_profile_api_key.clear();
+                        }
+                        if ui.button(self.translator.t("add")).clicked() {
+                            if !self.new_profile_name.is_empty() && !self.new_profile_url.is_empty()
+                            {
+                                self.config.add_profile(
+                                    self.new_profile_name.clone(),
+                                    self.new_profile_url.clone(),
+                                    self.new_profile_api_key.clone(),
+                                );
+                                self.config.current_profile = Some(self.new_profile_name.clone());
+                                self.save_config();
+                                self.show_add_profile_popup = false;
+                                self.new_profile_name.clear();
+                                self.new_profile_url.clear();
+                                self.new_profile_api_key.clear();
+                            }
+                        }
+                    });
+                });
+        }
+
+        if self.show_api_key_popup {
+            egui::Window::new("API Key")
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("API Key :");
+                        ui.monospace(&self.new_profile_api_key);
+                        if ui.small_button("📋").clicked() {
+                            ui.ctx().copy_text(self.new_profile_api_key.clone().into());
+                        }
+                    });
+                    if ui.button(self.translator.t("close")).clicked() {
+                        self.show_api_key_popup = false;
+                    }
+                });
+        }
     }
 }
