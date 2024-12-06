@@ -1,10 +1,14 @@
-name: Build Check
+name: pnpm Build Check
 
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - 'resources/hot-reload/**'
+      - '.github/workflows/pnpm.yml'
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:  # Permet de lancer manuellement
 
 jobs:
   build:
