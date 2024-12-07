@@ -1,0 +1,14 @@
+{
+    "latest": "1.0.0",
+    "versions": {
+        "1.0.0": {
+            "requires": {
+                "watcher": "1.0.0"
+            },
+            "changelog": [
+                "🚀 Initial release"
+            ],
+            "download": "https://github.com/SUP2Ak/hot-reload/releases/download/v1.0.0/hot-reload-fx.zip"
+        }
+    }
+}

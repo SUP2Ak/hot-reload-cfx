@@ -1,0 +1,15 @@
+{
+    "latest": "1.0.0",
+    "versions": {
+        "1.0.0": {
+            "requires": {
+                "ui": "1.0.0",
+                "fx": "1.0.0"
+            },
+            "changelog": [
+                "🚀 Initial release"
+            ],
+            "download": "https://github.com/SUP2Ak/hot-reload/releases/download/v1.0.0/hot-reload-watcher.zip"
+        }
+    }
+}
