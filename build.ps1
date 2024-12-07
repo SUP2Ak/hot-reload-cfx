@@ -1,74 +1,27 @@
-function Show-TargetMenu {
-    Write-Host "`n📦 Targets installation selection" -ForegroundColor Cyan
-    Write-Host "------------------------"
-    Write-Host "1. Windows (x86_64-pc-windows-msvc)"
-    Write-Host "2. Linux (x86_64-unknown-linux-gnu)"
-    Write-Host "3. MacOS (x86_64-apple-darwin)"
-    Write-Host "4. All targets"
-    Write-Host "5. Back"
-    Write-Host "------------------------"
+function Check-RequiredTargets {
+    $requiredTargets = @("x86_64-pc-windows-msvc", "x86_64-unknown-linux-musl", "x86_64-apple-darwin")
+    $missingTargets = @()
 
-    $choice = Read-Host "Choose an option"
-    
-    $targets = @()
-    switch ($choice) {
-        "1" { $targets = @("x86_64-pc-windows-msvc") }
-        "2" { $targets = @("x86_64-unknown-linux-gnu") }
-        "3" { $targets = @("x86_64-apple-darwin") }
-        "4" { $targets = @("x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu", "x86_64-apple-darwin") }
-        "5" { return $null }
-        default { 
-            Write-Host "❌ Invalid option" -ForegroundColor Red
-            return $null
+    foreach ($target in $requiredTargets) {
+        $installed = rustup target list | Select-String "^$target" | Select-String "installed"
+        if (-not $installed) {
+            $missingTargets += $target
         }
     }
-    return $targets
-}
 
-function Install-RustTargets {
-    Write-Host "`n🔧 Rust targets management..." -ForegroundColor Cyan
-    
-    $targets = Show-TargetMenu
-    if ($null -eq $targets) {
+    if ($missingTargets.Count -gt 0) {
+        Write-Host "❌ Missing required targets:" -ForegroundColor Red
+        $missingTargets | ForEach-Object { Write-Host "   - $_" -ForegroundColor Yellow }
+        Write-Host "`nPlease run install-targets.ps1 first to install missing targets." -ForegroundColor Cyan
         return $false
     }
 
-    foreach ($target in $targets) {
-        $installed = rustup target list | Select-String "^$target" | Select-String "installed"
-        if (-not $installed) {
-            Write-Host "   📥 Installing target $target..." -ForegroundColor Yellow
-            
-            # Simple animation during installation
-            $spinner = @('⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏')
-            $job = Start-Job -ScriptBlock {
-                param($target)
-                rustup target add $target
-            } -ArgumentList $target
-
-            $i = 0
-            while ($job.State -eq 'Running') {
-                Write-Host "`r   $($spinner[$i % $spinner.Length]) Downloading... " -NoNewline -ForegroundColor Yellow
-                Start-Sleep -Milliseconds 100
-                $i++
-            }
-
-            $result = Receive-Job -Job $job
-            Remove-Job -Job $job
-            Write-Host "`r                                                    " -NoNewline
-
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "   ✅ Target $target installed successfully" -ForegroundColor Green
-            } else {
-                Write-Host "   ❌ Installation of $target failed" -ForegroundColor Red
-                Write-Host $result -ForegroundColor Red
-                return $false
-            }
-        } else {
-            Write-Host "   ✅ Target $target already installed" -ForegroundColor Green
-        }
-    }
-
     return $true
+}
+
+# Check targets before continuing
+if (-not (Check-RequiredTargets)) {
+    exit 1
 }
 
 function Create-ReleaseFolder {
@@ -77,17 +30,13 @@ function Create-ReleaseFolder {
         Remove-Item -Path $releasePath -Recurse -Force
     }
     New-Item -Path $releasePath -ItemType Directory | Out-Null
-    Write-Host "📁 Dossier release créé" -ForegroundColor Green
+    Write-Host "📁 Release folder created" -ForegroundColor Green
 }
 
 function Build-UI {
     Write-Host "`n🎨 Building UI..." -ForegroundColor Cyan
     
-    $targets = Show-TargetMenu
-    if ($null -eq $targets) {
-        return
-    }
-
+    $targets = @("x86_64-pc-windows-msvc", "x86_64-unknown-linux-musl", "x86_64-apple-darwin")
     $progress = 0
     $totalTargets = $targets.Count
 
@@ -99,7 +48,7 @@ function Build-UI {
         Write-Host "   🔨 Building for $target..." -ForegroundColor Yellow
         $buildResult = cargo build --release --target $target -p hot-reload-ui
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "   ❌ Échec du build pour $target" -ForegroundColor Red
+            Write-Host "   ❌ Build failed for $target" -ForegroundColor Red
             continue
         }
 
@@ -117,32 +66,68 @@ function Build-UI {
     Write-Progress -Activity "Building UI" -Completed
 }
 
+function Install-CrossIfNeeded {
+    if (-not (Get-Command "cross" -ErrorAction SilentlyContinue)) {
+        Write-Host "📥 Installing cross-rs..." -ForegroundColor Yellow
+        
+        # Vérifier si Docker est installé
+        if (-not (Get-Command "docker" -ErrorAction SilentlyContinue)) {
+            Write-Host "❌ Docker is required but not installed." -ForegroundColor Red
+            Write-Host "Please install Docker Desktop from: https://www.docker.com/products/docker-desktop" -ForegroundColor Yellow
+            return $false
+        }
+        
+        # Installer cross
+        cargo install cross
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ Failed to install cross" -ForegroundColor Red
+            return $false
+        }
+        
+        Write-Host "✅ cross-rs installed successfully" -ForegroundColor Green
+    }
+    return $true
+}
+
 function Build-Watcher {
     Write-Host "`n👀 Building Watcher..." -ForegroundColor Cyan
     
-    $targets = @("x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu")
-    $availableTargets = $targets | Where-Object {
-        $installed = rustup target list | Select-String "^$_" | Select-String "installed"
-        return $installed
+    #Configurer l'environnement pour MUSL
+    $muslPath = "C:\musl\tools\bin"
+    if (Test-Path $muslPath) {
+        $env:PATH = "$muslPath;$env:PATH"
+        $env:CC_x86_64_unknown_linux_musl = "x86_64-linux-musl-gcc"
+        $env:CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER = "x86_64-linux-musl-gcc"
     }
-
-    if ($availableTargets.Count -eq 0) {
-        Write-Host "   ❌ Aucune target compatible installée" -ForegroundColor Red
-        return
-    }
-
+    
+    $targets = @("x86_64-pc-windows-msvc", "x86_64-unknown-linux-musl")
     $progress = 0
-    $totalTargets = $availableTargets.Count
+    $totalTargets = $targets.Count
 
-    foreach ($target in $availableTargets) {
+    foreach ($target in $targets) {
         $progress++
         $percent = [math]::Round(($progress / $totalTargets) * 100)
         Write-Progress -Activity "Building Watcher" -Status "Target: $target" -PercentComplete $percent
 
         Write-Host "   🔨 Building for $target..." -ForegroundColor Yellow
-        $buildResult = cargo build --release --target $target -p hot-reload-watcher
+        
+        # Utiliser cross pour Linux
+        if ($target -eq "x86_64-unknown-linux-musl") {
+            # Vérifier/Installer cross si nécessaire
+            if (-not (Install-CrossIfNeeded)) {
+                Write-Host "   ❌ Build failed for $target : cross-rs not available" -ForegroundColor Red
+                continue
+            }
+            
+            # Utiliser le chemin complet de cross
+            $crossPath = Join-Path $env:USERPROFILE ".cargo\bin\cross.exe"
+            $buildResult = & $crossPath build --release --target $target -p hot-reload-watcher
+        } else {
+            $buildResult = cargo build --release --target $target -p hot-reload-watcher
+        }
+        
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "   ❌ Échec du build pour $target" -ForegroundColor Red
+            Write-Host "   ❌ Build failed for $target" -ForegroundColor Red
             continue
         }
 
@@ -159,8 +144,6 @@ function Build-Watcher {
             Compress-Archive -Path "$tempDir/*" -DestinationPath $zipName -Force
             Remove-Item -Path $tempDir -Recurse -Force
             Write-Host "   ✅ Created $zipName" -ForegroundColor Green
-        } else {
-            Write-Host "   ❌ Binary not found: $sourcePath" -ForegroundColor Red
         }
     }
     Write-Progress -Activity "Building Watcher" -Completed
@@ -174,7 +157,7 @@ function Build-FXServer {
     Push-Location resources/hot-reload
     $buildResult = pnpm build
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "   ❌ Échec du build FX Server" -ForegroundColor Red
+        Write-Host "   ❌ FX Server build failed" -ForegroundColor Red
         Pop-Location
         Write-Progress -Activity "Building FX Server" -Completed
         return
@@ -208,7 +191,6 @@ function Show-Menu {
 }
 
 # Main
-Install-RustTargets
 Create-ReleaseFolder
 
 do {
