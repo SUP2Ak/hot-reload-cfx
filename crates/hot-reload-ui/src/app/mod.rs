@@ -15,7 +15,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::collections::VecDeque;
-use hot_reload_common::{AuthRequest, AuthResponse, InitialData};
+use hot_reload_common::{AuthRequest, AuthResponse, InitialData, VersionChecker};
+
+#[derive(Clone)]
+struct Version {
+    current: String,
+    latest: String,
+    message: String,
+}
 
 #[derive(Clone, PartialEq)]
 enum ConnectionStatus {
@@ -26,10 +33,19 @@ enum ConnectionStatus {
     Error(String),
 }
 
+#[derive(Clone, PartialEq)]
+enum ServerState {
+    Disconnected,
+    Connected,
+    #[allow(dead_code)]
+    Error(String),
+}
+
 pub struct HotReloadApp {
     config: ServerConfig,
     runtime: Arc<Runtime>,
     connection_status: Arc<Mutex<ConnectionStatus>>,
+    server_status: Arc<Mutex<ServerState>>,
     resource_tree: Arc<Mutex<HashMap<String, Vec<String>>>>,
     resources_path: Arc<Mutex<Option<String>>>,
     show_add_profile_popup: bool,
@@ -49,6 +65,7 @@ pub struct HotReloadApp {
     logs: Arc<Mutex<VecDeque<String>>>,
     pending_messages: Arc<Mutex<Vec<String>>>,
     last_update: Arc<Mutex<std::time::Instant>>,
+    version: Version,
 }
 
 #[derive(Default, Clone, Serialize, Debug)]
@@ -72,14 +89,52 @@ struct DebugResourceData {
     timestamp: String,
 }
 
-
 impl HotReloadApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        let runtime = Arc::new(Runtime::new().expect("Erreur lors de la création du runtime!"));
+    pub async fn new(cc: &eframe::CreationContext<'_>, runtime: Arc<Runtime>) -> Self {
         let connection_status = Arc::new(Mutex::new(ConnectionStatus::Disconnected));
         let resource_tree = Arc::new(Mutex::new(HashMap::new()));
         let resources_path = Arc::new(Mutex::new(None));
+        let server_status = Arc::new(Mutex::new(ServerState::Disconnected));
         let mut translator = Translator::new();
+
+        if let Ok(config_str) = std::fs::read_to_string("server_config.json") {
+            let config: ServerConfig = serde_json::from_str(&config_str).unwrap_or_default();
+            let _ = translator.set_language(config.language);
+        }
+
+        let current_version = env!("CARGO_PKG_VERSION").to_string();
+        let version_checker_ui = VersionChecker::check_ui().await;      
+        let version = match &version_checker_ui {
+            Ok(v) => {
+                let latest = v.get_latest().to_string();
+                let message = if v.has_update(&current_version) {
+                    tracing::info!("New version available: {}", latest);
+                    translator.t_args(
+                        "new_version_available",
+                        &[("version", &latest)]
+                    )
+                } else {
+                    tracing::info!("UI is up to date");
+                    translator.t("ui_up_to_date").to_string()
+                };
+                Version {
+                    current: current_version,
+                    latest,
+                    message,
+                }
+            },
+            Err(e) => {
+                tracing::warn!("Failed to check UI version: {}", e);
+                Version {
+                    current: current_version.clone(),
+                    latest: current_version,
+                    message: translator.t_args(
+                        "failed_check_updates",
+                        &[("error", &e.to_string())]
+                    ),
+                }
+            }
+        };
 
         egui_extras::install_image_loaders(&cc.egui_ctx);
 
@@ -102,15 +157,11 @@ impl HotReloadApp {
             },
         };
 
-        if let Ok(config_str) = std::fs::read_to_string("server_config.json") {
-            let config: ServerConfig = serde_json::from_str(&config_str).unwrap_or_default();
-            let _ = translator.set_language(config.language);
-        }
-
         let mut app = Self {
             config: ServerConfig::default(),
             runtime,
             connection_status,
+            server_status,
             resource_tree,
             resources_path,
             show_add_profile_popup: false,
@@ -129,6 +180,7 @@ impl HotReloadApp {
             logs: Arc::new(Mutex::new(VecDeque::with_capacity(100))),
             pending_messages: Arc::new(Mutex::new(Vec::with_capacity(100))),
             last_update: Arc::new(Mutex::new(std::time::Instant::now())),
+            version,
         };
 
         if let Ok(config_str) = std::fs::read_to_string("server_config.json") {
@@ -165,17 +217,17 @@ impl HotReloadApp {
         let resources_path = self.resources_path.clone();
         let logs = self.logs.clone();
         let pending_messages = self.pending_messages.clone();
+        let server_status = self.server_status.clone();
 
         rt.spawn(async move {
             info!("🔌 Tentative de connexion à {}", ws_url);
             match connect_async(&ws_url).await {
                 Ok((mut ws_stream, _)) => {
-                    // Authentification si nécessaire
                     if let Some(key) = api_key {
                         let auth = AuthRequest { api_key: key };
                         if let Ok(auth_msg) = serde_json::to_string(&auth) {
                             if let Err(e) = ws_stream.send(Message::Text(auth_msg)).await {
-                                error!("❌ Erreur d'authentification: {}", e);
+                                error!("❌ Authentication error: {}", e);
                                 if let Ok(mut status) = status.lock() {
                                     *status = ConnectionStatus::Error(e.to_string());
                                 }
@@ -193,7 +245,7 @@ impl HotReloadApp {
                                                 return;
                                             }
                                             AuthResponse::Success => {
-                                                info!("✅ Authentification réussie");
+                                                info!("✅ Authentication successful");
                                             }
                                         }
                                     }
@@ -206,11 +258,15 @@ impl HotReloadApp {
                         }
                     }
 
+                    // if let Ok(mut server_status) = server_status.lock() {
+                    //     *server_status = ServerState::Connected;
+                    // }
+
+                    info!("📡 WebSocket connection established");
+
                     if let Ok(mut status) = status.lock() {
                         *status = ConnectionStatus::Connected;
                     }
-
-                    info!("📡 Connexion WebSocket établie");
 
                     // Boucle de réception des messages
                     while let Some(msg) = ws_stream.next().await {
@@ -222,29 +278,68 @@ impl HotReloadApp {
                                     // Essayer de parser en tant que données initiales
                                     match serde_json::from_str::<InitialData>(text) {
                                         Ok(initial_data) => {
-                                            info!("📥 Données initiales reçues avec succès");
-                                            info!("📂 Chemin des ressources: {}", initial_data.resources_path);
-                                            info!("📚 Nombre de ressources: {}", initial_data.resources.len());
+                                            info!("📥 Initial data received successfully");
+                                            info!("📂 Resources path: {}", initial_data.resources_path);
+                                            info!("📚 Number of resources: {}", initial_data.resources.len());
                                             Self::handle_initial_data(&resources_path, &resource_tree, initial_data).await;
                                             continue;
                                         }
                                         Err(_) => {
-                                            // Essayer de parser en tant que message batch
                                             match serde_json::from_str::<serde_json::Value>(text) {
                                                 Ok(json) => {
-                                                    info!("🔍 Type de message reçu: {}", json["type"]);
-                                                    if json["type"] == "batch" {
-                                                        if let Some(messages) = json["messages"].as_array() {
-                                                            info!("📦 Batch reçu avec {} messages", messages.len());
-                                                            let message_strings: Vec<String> = messages.iter()
-                                                                .filter_map(|msg| msg["message"].as_str().map(String::from))
-                                                                .collect();
-                                                            Self::process_message_batch(&message_strings, &logs, &pending_messages).await;
+                                                    match json.get("type").and_then(|t| t.as_str()) {
+                                                        Some("server_status") => {
+                                                            info!("🔍 Status reçu: {}", json["status"]);
+                                                            if let Ok(mut server_status) = server_status.lock() {
+                                                                *server_status = match json["status"].as_str() {
+                                                                    Some("online") => ServerState::Connected,
+                                                                    Some("offline") => ServerState::Disconnected,
+                                                                    _ => ServerState::Error(json["status"].as_str().unwrap_or("unknown").to_string()),
+                                                                };
+                                                            }
                                                         }
+                                                        Some("fx_resource_action") => {
+                                                            info!("🔍 Action reçue: {}", json["action"]);
+                                                        }
+                                                        _ => {}
                                                     }
+
+                                                    // info!("🔍 Type de message reçu: {}", json["type"]);
+                                                    // if json["type"] == "batch" {
+                                                    //     let batch_type = json["type"].as_str().unwrap_or("unknown");
+                                                    //     info!("🔍 Type de batch reçu: {}", batch_type);
+                                                    //     match batch_type {
+                                                    //         "server_status" => {
+                                                    //             if let Some(status) = json["status"].as_str() {
+                                                    //                 info!("🔍 Status reçu: {}", status);
+                                                    //                 if let Ok(mut server_status) = server_status.lock() {
+                                                    //                     *server_status = match status {
+                                                    //                         "online" => ServerState::Connected,
+                                                    //                         "offline" => ServerState::Disconnected,
+                                                    //                         _ => ServerState::Error(status.to_string()),
+                                                    //                     };
+                                                    //                 }
+                                                    //             }
+                                                    //         }
+                                                    //         "fx_resource_action" => {
+                                                    //             json["action"].as_str().map(|action| {
+                                                    //                 info!("🔍 Action reçue: {}", action);
+                                                    //             });
+                                                    //         }
+                                                    //         _ => {}
+                                                    //     }
+
+                                                    //     if let Some(messages) = json["messages"].as_array() {
+                                                    //         info!("📦 Batch received with {} messages", messages.len());
+                                                    //         let message_strings: Vec<String> = messages.iter()
+                                                    //             .filter_map(|msg| msg["message"].as_str().map(String::from))
+                                                    //             .collect();
+                                                    //         Self::process_message_batch(&message_strings, &logs, &pending_messages, &server_status).await;
+                                                    //     }
+                                                    // }
                                                 }
                                                 Err(e) => {
-                                                    error!("❌ Erreur de parsing JSON: {}", e);
+                                                    error!("❌ JSON parsing error: {}", e);
                                                 }
                                             }
                                         }
@@ -252,7 +347,7 @@ impl HotReloadApp {
                                 }
                             }
                             Err(e) => {
-                                error!("❌ Erreur WebSocket: {}", e);
+                                error!("❌ WebSocket error: {}", e);
                                 if let Ok(mut status) = status.lock() {
                                     *status = ConnectionStatus::Error(e.to_string());
                                 }
@@ -262,7 +357,7 @@ impl HotReloadApp {
                     }
                 }
                 Err(e) => {
-                    error!("❌ Erreur de connexion: {}", e);
+                    error!("❌ Connection error: {}", e);
                     if let Ok(mut status) = status.lock() {
                         *status = ConnectionStatus::Error(e.to_string());
                     }
@@ -276,14 +371,14 @@ impl HotReloadApp {
         resource_tree: &Arc<Mutex<HashMap<String, Vec<String>>>>,
         initial_data: InitialData,
     ) {
-        info!("🔄 Traitement des données initiales");
+        info!("🔄 Processing initial data");
         if let Ok(mut path) = resources_path.lock() {
             *path = Some(initial_data.resources_path.clone());
-            info!("📂 Chemin des ressources mis à jour: {}", initial_data.resources_path);
+            info!("📂 Resources path updated: {}", initial_data.resources_path);
         }
         if let Ok(mut tree) = resource_tree.lock() {
             *tree = initial_data.resources.clone();
-            info!("🌳 Arbre des ressources mis à jour avec {} ressources", tree.len());
+            info!("🌳 Resources tree updated with {} resources", tree.len());
         }
     }
 
@@ -291,26 +386,40 @@ impl HotReloadApp {
         messages: &[String],
         logs: &Arc<Mutex<VecDeque<String>>>,
         pending: &Arc<Mutex<Vec<String>>>,
+        server_status: &Arc<Mutex<ServerState>>,
     ) {
-        info!("🔄 Traitement d'un batch de {} messages", messages.len());
+        info!("🔄 Processing a batch of {} messages", messages.len());
         if let Ok(mut pending_messages) = pending.lock() {
             for message in messages {
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(message) {
-                    if let Some(msg_type) = json.get("type") {
-                        if msg_type == "fivem_response" {
+                    match json.get("type").and_then(|t| t.as_str()) {
+                        Some("fx_response") => {
                             if let Some(message) = json.get("message").and_then(|m| m.as_str()) {
                                 pending_messages.push(message.to_string());
-                                info!("📨 Message ajouté aux messages en attente: {}", message);
+                                info!("📨 Message added to pending messages: {}", message);
                                 
                                 if let Ok(mut logs) = logs.lock() {
                                     if logs.len() >= 100 {
                                         logs.pop_front();
                                     }
                                     logs.push_back(message.to_string());
-                                    info!("📝 Message ajouté aux logs");
+                                    info!("📝 Message added to logs");
                                 }
                             }
-                        }
+                        },
+                        Some("server_status") => {
+                            if let Some(status) = json.get("status").and_then(|s| s.as_str()) {
+                                if let Ok(mut current_status) = server_status.lock() {
+                                    *current_status = match status {
+                                        "online" => ServerState::Connected,
+                                        "offline" => ServerState::Disconnected,
+                                        _ => ServerState::Error(status.to_string()),
+                                    };
+                                    info!("🔄 Server status updated: {}", status);
+                                }
+                            }
+                        },
+                        _ => {}
                     }
                 }
             }
