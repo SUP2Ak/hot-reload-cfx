@@ -118,6 +118,14 @@ impl Translator {
         self.translate(key)
     }
 
+    pub fn t_args(&self, key: &str, args: &[(&str, &str)]) -> String {
+        let mut message = self.t(key).to_string();
+        for (arg_key, arg_value) in args {
+            message = message.replace(&format!("{{{}}}", arg_key), arg_value);
+        }
+        message
+    }
+    
     pub fn available_languages() -> Vec<Language> {
         vec![Language::English, Language::French]
     }
