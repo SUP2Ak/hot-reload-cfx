@@ -1,5 +1,5 @@
 use super::HotReloadApp;
-use crate::app::ConnectionStatus;
+use crate::app::{ConnectionStatus, ServerState};
 use eframe::egui;
 
 impl HotReloadApp {
@@ -120,6 +120,22 @@ impl HotReloadApp {
                                     ))
                                     .color(egui::Color32::RED),
                                 );
+                            }
+                        }
+
+                        ui.separator();
+
+                        ui.label(self.translator.t("server_status"));
+                        let server_status = self.server_status.lock().unwrap().clone();
+                        match server_status {
+                            ServerState::Disconnected => {
+                                ui.label(self.translator.t("server_disconnected"));
+                            }
+                            ServerState::Connected => {
+                                ui.label(self.translator.t("server_connected"));
+                            }
+                            ServerState::Error(err) => {
+                                ui.label(egui::RichText::new(format!("{}: {}", self.translator.t("server_error"), err)).color(egui::Color32::RED));
                             }
                         }
                     }
