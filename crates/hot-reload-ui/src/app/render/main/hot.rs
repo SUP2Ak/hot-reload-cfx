@@ -1,5 +1,6 @@
 use super::HotReloadApp;
 use eframe::egui;
+//use hot_reload_common::check_version;
 
 impl HotReloadApp {
     pub fn render_hot(&mut self, ui: &mut egui::Ui) {
@@ -15,5 +16,9 @@ impl HotReloadApp {
                 ));
             });
         }
+
+        ui.separator();
+
+        ui.label(self.version.message.clone());
     }
 }
