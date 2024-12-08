@@ -1,3 +1,6 @@
+mod version;
+pub use version::*;
+
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 
