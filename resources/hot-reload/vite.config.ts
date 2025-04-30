@@ -22,4 +22,13 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: true,
   },
+  base: './',
+  resolve: {
+    alias: {
+      '@': `${resolve(__dirname, './src/')}`,
+      '@server': `${resolve(__dirname, './src/server/')}`,
+      '@utils': `${resolve(__dirname, './src/utils/')}`,
+      '@watcher': `${resolve(__dirname, './src/class/app')}`,
+    }
+  }
 })
