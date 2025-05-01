@@ -44,6 +44,10 @@ Ce projet est sous licence MIT. Voir le fichier [LICENSE.txt](LICENSE.txt) pour 
 
 ## Contributeurs
 
+Vous voulez contribuer à ce projet? Cliquez sur le badge ci-dessous.
+
+[![](https://img.shields.io/badge/-Contribution-000?style=for-the-badge&logo=github&logoColor=white)](CONTRIBUTING.fr.md)
+
 - [@sup2ak](https://github.com/sup2ak)
 
 ## Support
