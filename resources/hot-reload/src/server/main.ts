@@ -1,3 +1,8 @@
+/**
+ *  Todo:
+ *  - Translations
+ */
+
 import WATCHER_API from "./class/app";
 const RESOURCE_NAME = GetCurrentResourceName();
 
@@ -18,13 +23,13 @@ RegisterCommand('hot::status', (_: number): void => {
 RegisterCommand('hot::add', (_: number, args: string[]): void => {
     const resourceName = args[1];
     if (!resourceName) return console.log('^1Usage: hot::add <resourceName> | <resourceName.path.ext>^0');
-    WATCHER_API.add(resourceName);
+    //WATCHER_API.add(resourceName);
 }, true);
 
 RegisterCommand('hot::remove', (_: number, args: string[]): void => {
     const resourceName = args[1];
     if (!resourceName) return console.log('^1Usage: hot::remove <resourceName>^0');
-    WATCHER_API.remove(resourceName);
+    //WATCHER_API.remove(resourceName);
 }, true);
 
 /**

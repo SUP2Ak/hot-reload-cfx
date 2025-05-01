@@ -10,6 +10,8 @@ export class HotReloadServer {
   private clients: Set<WebSocket> = new Set();
   // @ts-ignore
   private locale: string;
+  private lastMessage: { [key: string]: number } = {};
+  private debounceTime = 1000;
 
   // @ts-ignore
   constructor(private port: number) {
@@ -32,6 +34,11 @@ export class HotReloadServer {
       ws.on('message', async (data: any): Promise<void> => {
         try {
           const change: ResourceChange = JSON.parse(data.toString());
+          const key = `${change.resource_name}:${change.change_type}`;
+          const now = Date.now();
+          if (this.lastMessage[key] && (now - this.lastMessage[key]) < this.debounceTime) return;
+          
+          this.lastMessage[key] = now;
           await this.handleResourceChange(change);
         } catch (error) {
           console.error('^1Error processing message:', error, '^0');
