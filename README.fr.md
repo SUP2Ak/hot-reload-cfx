@@ -1,62 +1,42 @@
-# FiveM Hot Reload (En Développement)
+# FiveM Hot Reload
 
 You can read this readme in English:
 
 [![](https://img.shields.io/badge/English-000?style=for-the-badge&logo=github&logoColor=white)](README.md)
 
-Une application de bureau multiplateforme construite avec Rust pour surveiller et recharger à chaud les ressources FiveM.
+Un outil de développement pour FiveM qui permet de recharger à chaud les ressources.
+Cette Outil est composé en 3 parties :
+- Le Watcher : Un exécutable qui se place à la racine de votre serveur FiveM (Cette racine où ce situe votre dossier `resources`).
+- L'interface : Une application de bureau windows (stable) et macos | linux (sans doute dans le futur) qui permet de gérer les profils et de recevoir les notifications de changement de ressources.
+- La Ressource : Une ressource FiveM qui permet de recevoir les notifications de changement de ressources et de les appliquer à chaud.
 
 ## Fonctionnalités Actuelles
 
-### Système de Profils
+### Interface
 - Gestion multi-profils de connexion
 - Profil localhost par défaut (non supprimable) sans API key
 - Profils distants avec authentification par API key
 - Configuration simplifiée sans référencement du dossier resources
-
-### Architecture
-- Séparation claire UI (client) / Watcher (server)
-- Générateur d'API key intégré
-- Watcher autonome à placer à la racine du serveur
-- Configuration automatique au premier lancement
-
-### Communication
-- WebSocket sécurisé pour les connexions distantes
-- Authentification automatique selon le type de profil
-- Détection en temps réel des changements
-
-## En Développement
-
-### Interface Utilisateur
-- [ ] Système de checkbox pour ignorer/surveiller dossiers et fichiers
-- [ ] Interface de logs (watcher, application, ressources)
-- [ ] Amélioration de l'expérience utilisateur
-- [ ] Gestion avancée des profils
+- Arborescence des ressources fetchée automatiquement ainsi que les fichiers watchés
 
 ### Watcher
-- [ ] Finalisation du `handle_change`
-- [ ] Gestion intelligente des modifications de fxmanifest
-- [ ] Détection et traitement des ressources ajoutées/supprimées
-- [ ] Optimisation des performances
+- Détection en temps réel des changements
+- Application des changements à chaud
+- Gestion intelligente des modifications de fxmanifest ainsi que des fichier supprimés/ajoutés (Afin de refresh avant de relancer la ressource)
+- Gestion intelligente des fichiers uniquement modifiés (Afin de relancer sans refresh)
+- Intégration d'un CLI pour les commandes internes (help, version, etc...)
 
-### Ressource FiveM
-- [ ] Amélioration de l'exécution des commandes internes
-- [ ] Interface de logs détaillée
-- [ ] Gestion des erreurs améliorée
-
-## Installation
-
-1. Téléchargez la dernière version
-2. Pour le serveur : placez le watcher à la racine de votre serveur FiveM
-3. Pour le client : lancez l'application UI
-4. Configurez vos profils selon vos besoins
-
-## Utilisation
-
-1. Démarrez le watcher sur votre serveur
-2. Lancez l'interface client
-3. Sélectionnez ou créez un profil
-4. Connectez-vous et commencez à développer
+### Ressource
+- Permet d'appliquer les changements à chaud détectés par le watcher
+- requiert les permissions dans le server.cfg
+```
+add_ace resource.hot-reload command.start allow
+add_ace resource.hot-reload command.stop allow
+add_ace resource.hot-reload command.ensure allow
+add_ace resource.hot-reload command.refresh allow
+add_ace resource.hot-reload command.add_ace allow
+add_ace resource.hot-reload command.add_principal allow
+```
 
 ## Licence
 
