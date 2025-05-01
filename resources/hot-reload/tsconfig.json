@@ -11,10 +11,18 @@
     "isolatedModules": true,
     "noEmit": true,
     "strict": true,
-    "noUnusedLocals": true,
+    "noUnusedLocals": false,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "types": ["@citizenfx/server", "node"]
+    "types": ["@citizenfx/server", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@server/*": ["src/server/*"],
+      "@utils/*": ["src/server/utils/*"],
+      "@class/*": ["src/server/class/*"],
+      "@utils": ["src/server/utils/index.ts"]
+    }
   },
   "include": ["src"]
 }

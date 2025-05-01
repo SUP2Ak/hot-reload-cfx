@@ -1,7 +1,7 @@
 {
   "name": "hot-reload",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,6 +16,6 @@
     "vite": "^4.5.1"
   },
   "dependencies": {
-    "ws": "^8.16.0"
+    "ws": "^8.18.0"
   }
 }

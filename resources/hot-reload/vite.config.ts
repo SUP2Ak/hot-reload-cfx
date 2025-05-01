@@ -11,7 +11,7 @@ export default defineConfig({
       fileName: (_: string, entryName: string) => `${entryName}.js`
     },
     rollupOptions: {
-      external: ['@citizenfx/server', 'ws'],
+      external: ['@citizenfx/server', 'ws', 'path'],
       output: {
         entryFileNames: '[name].js',
         chunkFileNames: '[name].js',
@@ -20,6 +20,14 @@ export default defineConfig({
     },
     outDir: 'dist',
     emptyOutDir: true,
-    // sourcemap: true,
+    //sourcemap: true,
   },
+  resolve: {
+    alias: [
+      { find: '@', replacement: resolve(__dirname, 'src') },
+      { find: '@server', replacement: resolve(__dirname, 'src/server') },
+      { find: '@utils', replacement: resolve(__dirname, 'src/server/utils') },
+      { find: '@class', replacement: resolve(__dirname, 'src/server/class') }
+    ]
+  }
 })
