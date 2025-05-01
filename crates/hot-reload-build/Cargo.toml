@@ -1,0 +1,11 @@
+[package]
+name = "hot-reload-build"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "hot-reload-build"
+path = "src/main.rs"
+
+[dependencies]
+zip = "0.6.0"
