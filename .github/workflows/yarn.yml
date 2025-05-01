@@ -28,6 +28,7 @@ jobs:
     - name: Get yarn store directory
       shell: bash
       run: |
+        cd resources/hot-reload
         echo "STORE_PATH=$(yarn store path --silent)" >> $GITHUB_ENV
 
     - name: Cache yarn modules
