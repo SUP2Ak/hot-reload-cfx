@@ -1,0 +1,12 @@
+FROM rust:latest
+WORKDIR /app
+COPY . .
+ARG COMPONENT
+RUN if [ "$COMPONENT" = "hot-reload-ui" ]; then \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g pnpm && \
+    cd resources/hot-reload && pnpm install; \
+    fi
+RUN cargo build --release --target x86_64-unknown-linux-gnu -p ${COMPONENT}
+RUN cp target/x86_64-unknown-linux-gnu/release/${COMPONENT} /app/ 
