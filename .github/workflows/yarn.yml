@@ -1,11 +1,11 @@
-name: pnpm Build Check
+name: yarn Build Check
 
 on:
   push:
     branches: [ "main" ]
     paths:
       - 'resources/hot-reload/**'
-      - '.github/workflows/pnpm.yml'
+      - '.github/workflows/yarn.yml'
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:  # Permet de lancer manuellement
@@ -20,36 +20,33 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
-    
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v2
-      with:
-        version: 8
-        run_install: false
+        node-version: '16'
 
-    - name: Get pnpm store directory
+    - name: Install yarn
+      run: npm install -g yarn@1.22.22
+
+    - name: Get yarn store directory
       shell: bash
       run: |
-        echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+        echo "STORE_PATH=$(yarn store path --silent)" >> $GITHUB_ENV
 
-    - name: Cache pnpm modules
+    - name: Cache yarn modules
       uses: actions/cache@v3
       with:
         path: ${{ env.STORE_PATH }}
-        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+        key: ${{ runner.os }}-yarn-store-${{ hashFiles('**/yarn.lock') }}
         restore-keys: |
-          ${{ runner.os }}-pnpm-store-
+          ${{ runner.os }}-yarn-store-
 
     - name: Install dependencies
       run: |
         cd resources/hot-reload
-        pnpm install
+        yarn install
 
     - name: Build
       run: |
         cd resources/hot-reload
-        pnpm run build
+        yarn build
 
     - name: Check build output
       run: |
