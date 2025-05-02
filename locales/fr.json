@@ -57,5 +57,6 @@
     "language_fr": "Français",
     "new_version_available": "Nouvelle version disponible: {version}",
     "ui_up_to_date": "UI est à jour",
-    "failed_check_updates": "Impossible de vérifier les mises à jour: {error}"
+    "failed_check_updates": "Impossible de vérifier les mises à jour: {error}",
+    "restart_debug": "🔄 Redémarrer en mode débogage"
 }

@@ -57,5 +57,6 @@
     "language_fr": "French",
     "new_version_available": "New version available: {version}",
     "ui_up_to_date": "UI is up to date",
-    "failed_check_updates": "Failed to check for updates: {error}"
+    "failed_check_updates": "Failed to check for updates: {error}",
+    "restart_debug": "🔄 Restart in debug mode"
 }
