@@ -25,6 +25,14 @@ impl HotReloadApp {
                 });
 
                 ui.menu_button(self.translator.t("tools"), |ui| {
+                    if ui.button(self.translator.t("restart_debug")).clicked() {
+                        if let Ok(exe_path) = std::env::current_exe() {
+                            let _ = std::process::Command::new(exe_path)
+                                .env("RUST_LOG", "debug")
+                                .spawn();
+                            std::process::exit(0);
+                        }
+                    }
                     ui.separator();
                     if ui.button(self.translator.t("generate_api_key")).clicked() {
                         let api_key = generate_api_key();
