@@ -22,7 +22,7 @@ jobs:
           echo "{\"version\": \"$(cargo metadata --format-version=1 | jq -r '.packages[] | select(.name == \"hot-reload-ui\") | .version')\"}" > version.ui.json
       
       - name: Upload Windows Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: windows-artifacts
           path: |
@@ -39,7 +39,7 @@ jobs:
         run: cargo build --package hot-reload-watcher --release
       
       - name: Upload Linux Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: linux-artifacts
           path: target/release/hot-reload-watcher
@@ -66,7 +66,7 @@ jobs:
           echo "{\"version\": \"$(jq -r '.version' resources/hot-reload/package.json)\"}" > version.fxserver.json
 
       - name: Download All Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
 
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v1
