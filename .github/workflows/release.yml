@@ -96,7 +96,7 @@ jobs:
       - uses: softprops/action-gh-release@v1
         with:
           files: |
-            artifacts/windows-artifacts/*.exe
+            artifacts/windows-artifacts/target/release/*.exe
             artifacts/windows-artifacts/version.*.json
             artifacts/linux-artifacts/hot-reload-watcher
             hot-reload-fxserver.zip
