@@ -58,8 +58,30 @@ jobs:
       - name: Install yarn
         run: npm install -g yarn@1.22.22
       
-      - name: Build FXServer Resource
-        run: cargo run --package hot-reload-build
+      - name: Build FXServer
+        run: |
+          cd resources/hot-reload
+          yarn install --ignore-engines
+          yarn build
+      
+      - name: Create FXServer zip
+        run: |
+          cd resources/hot-reload
+          mkdir -p hot-reload
+          cp -r package.json src tsconfig.json dist yarn.lock vite.config.ts hot-reload/
+          echo 'fx_version "cerulean"
+          author "SUP2Ak"
+          game "common"
+          use_experimental_fxv2_oal "yes"
+          repository "https://github.com/SUP2Ak/hot-reload-fivem"
+          description "Hot Reload for FiveM"
+          license "MIT"
+          version "1.0.0"
+          
+          server_only "yes"
+          server_script "dist/server.js"
+          dependency "yarn"' > hot-reload/fxmanifest.lua
+          zip -r ../../hot-reload-fxserver.zip hot-reload/
       
       - name: Generate FXServer Version
         run: |
