@@ -4,4 +4,4 @@ mod fxserver;
 mod types;
 
 pub use config::WatcherConfig;
-pub use watcher::run;
+pub use watcher::ResourceWatcher;

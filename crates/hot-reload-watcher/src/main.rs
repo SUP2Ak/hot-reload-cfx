@@ -1,9 +1,11 @@
+use hot_reload_watcher::ResourceWatcher;
 use hot_reload_watcher::WatcherConfig;
-use tracing::error;
-use tokio::io::{self, AsyncBufReadExt};
-use tracing_appender;
 use std::io::Write;
 use std::path::Path;
+use std::sync::Arc;
+use tokio::io::{self, AsyncBufReadExt};
+use tracing::error;
+use tracing_appender;
 
 #[tokio::main]
 async fn main() {
@@ -40,7 +42,8 @@ async fn main() {
 
     let config = WatcherConfig::load_or_create();
     let watcher_handle = tokio::spawn(async move {
-        if let Err(e) = hot_reload_watcher::run(config).await {
+        let watcher = Arc::new(ResourceWatcher::new(config));
+        if let Err(e) = watcher.run().await {
             error!("Error running watcher: {}", e);
             std::process::exit(1);
         }
@@ -53,8 +56,16 @@ async fn main() {
             .expect("cls command failed to start")
             .wait()
             .expect("failed to wait");
+    } else if cfg!(target_os = "linux") {
+        std::process::Command::new("clear")
+            .spawn()
+            .expect("clear command failed to start")
+            .wait()
+            .expect("failed to wait");
     } else {
-        print!("\x1B[2J\x1B[1;1H");
+        // TODO: Add support for other OS
+        println!("🚫 Unsupported OS");
+        std::process::exit(1);
     }
 
     let mut reader = io::BufReader::new(io::stdin()).lines();
@@ -67,13 +78,13 @@ async fn main() {
         match line.trim().to_lowercase().as_str() {
             "help" => {
                 println!("\n📋 Available commands:");
-                println!("- help     : Show this help message");
-                println!("- clear    : Clear the terminal");
-                println!("- exit     : Stop the watcher and exit");
-                println!("- status   : Show current watcher status");
-                println!("- version  : Show current version");
-                println!("- logs     : Open logs file");
-                println!("- console  : Open watcher console");
+                println!("- help        : Show this help message");
+                println!("- clear | cls : Clear the terminal");
+                println!("- exit | quit : Stop the watcher and exit");
+                println!("- status      : Show current watcher status");
+                println!("- version     : Show current version");
+                println!("- logs        : Open logs file");
+                println!("- console     : Open watcher console");
             },
             "cls" | "clear" => {
                 if cfg!(target_os = "windows") {
@@ -83,11 +94,18 @@ async fn main() {
                         .expect("cls command failed to start")
                         .wait()
                         .expect("failed to wait");
+                } else if cfg!(target_os = "linux") {
+                    std::process::Command::new("clear")
+                        .spawn()
+                        .expect("clear command failed to start")
+                        .wait()
+                        .expect("failed to wait");
                 } else {
-                    print!("\x1B[2J\x1B[1;1H");
+                    println!("🚫 Unsupported OS");
+                    std::process::exit(1);
                 }
             },
-            "exit" => {
+            "exit" | "quit" => {
                 println!("👋 Stopping watcher...");
                 break;
             },
@@ -103,31 +121,45 @@ async fn main() {
                         .args(["logs\\watcher.log"])
                         .spawn()
                         .expect("failed to open logs");
-                } else {
+                } else if cfg!(target_os = "linux") {
                     std::process::Command::new("xdg-open")
                         .arg("logs/watcher.log")
                         .spawn()
                         .expect("failed to open logs");
+                } else {
+                    println!("🚫 Unsupported OS");
+                    std::process::exit(1);
                 }
                 println!("📝 Logs file opened");
             },
             "console" => {
                 if cfg!(target_os = "windows") {
-                    let ps_script = r#"
+                    let path = std::env::current_dir().unwrap();
+                    let script_path = path.join("logs\\watch_script.ps1");
+                    let log_path = path.join("logs\\watcher.log");
+                    
+                    let ps_script = format!(r#"
                         $OutputEncoding = [Console]::OutputEncoding = [Text.Encoding]::UTF8
                         Write-Host "Watcher Console - Press Ctrl+C to close`n"
-                        Get-Content "logs\watcher.log" -Wait -Encoding utf8 | ForEach-Object {
-                            Write-Host $_
-                        }
-                    "#;
-                    let script_path = "logs\\watch_script.ps1";
-                    std::fs::write(script_path, ps_script).expect("Failed to create PowerShell script");
+                        $lastLine = ""
+                        while($true) {{
+                            if(Test-Path "{}") {{
+                                $currentLine = Get-Content "{}" -Tail 1 -Encoding utf8
+                                if($currentLine -ne $lastLine) {{
+                                    Write-Host $currentLine
+                                    $lastLine = $currentLine
+                                }}
+                            }}
+                            Start-Sleep -Milliseconds 100
+                        }}
+                    "#, log_path.display(), log_path.display());
 
+                    std::fs::write(script_path.clone(), ps_script).expect("Failed to create PowerShell script");
                     std::process::Command::new("cmd")
-                        .args(["/c", "start", "powershell", "-NoExit", "-ExecutionPolicy", "Bypass", "-File", script_path])
+                        .args(["/c", "start", "powershell", "-NoExit", "-ExecutionPolicy", "Bypass", "-File", script_path.to_str().unwrap()])
                         .spawn()
                         .expect("failed to open console");
-                } else {
+                } else if cfg!(target_os = "linux") {
                     // Vérifier si screen est installé
                     let has_screen = std::process::Command::new("which")
                         .arg("screen")
@@ -142,6 +174,8 @@ async fn main() {
                             .status() {
                             println!("❌ Failed to update apt: {}", e);
                             return;
+                        } else {
+                            println!("✅ Updated apt");
                         }
                         
                         if let Err(e) = std::process::Command::new("sudo")
@@ -149,6 +183,8 @@ async fn main() {
                             .status() {
                             println!("❌ Failed to install screen: {}", e);
                             return;
+                        } else {
+                            println!("✅ Installed screen");
                         }
                     }
 
@@ -174,6 +210,8 @@ async fn main() {
                                     .status() {
                                     println!("❌ Failed to attach to screen: {}", e);
                                     return;
+                                } else {
+                                    println!("✅ Attached to screen");
                                 }
                                 println!("📺 Console opened in screen session");
                                 println!("💡 To reattach later: screen -r {}", screen_name);
@@ -196,4 +234,4 @@ async fn main() {
 
     watcher_handle.abort();
     println!("👋 Watcher stopped");
-} 
+}
