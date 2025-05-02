@@ -1,8 +1,4 @@
 use std::collections::HashMap;
-use serde_json::Value;
-use std::fs;
-use std::path::Path;
-use std::sync::RwLock;
 use once_cell::sync::Lazy;
 use serde::{Serialize, Deserialize};
 
@@ -12,46 +8,27 @@ pub enum Language {
     French,
 }
 
-impl Language {
-    fn as_file_name(&self) -> &str {
-        match self {
-            Language::English => "en",
-            Language::French => "fr",
-        }
-    }
-}
-
 impl Default for Language {
     fn default() -> Self {
         Language::English
     }
 }
 
-static TRANSLATIONS: Lazy<RwLock<HashMap<Language, HashMap<String, String>>>> = 
+static TRANSLATIONS: Lazy<HashMap<Language, HashMap<String, String>>> = 
     Lazy::new(|| {
         let mut map = HashMap::new();
-        if let Ok(en_trans) = load_language_file(Language::English) {
+        let en_json = include_str!("../../../../locales/en.json");
+        let fr_json = include_str!("../../../../locales/fr.json");
+
+        if let Ok(en_trans) = serde_json::from_str(en_json) {
             map.insert(Language::English, en_trans);
         }
-        RwLock::new(map)
-    });
-
-fn load_language_file(lang: Language) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
-    let file_path = Path::new("locales").join(format!("{}.json", lang.as_file_name()));
-    let content = fs::read_to_string(&file_path)?;
-    let json: Value = serde_json::from_str(&content)?;
-    
-    let mut translations = HashMap::new();
-    if let Value::Object(map) = json {
-        for (key, value) in map {
-            if let Value::String(text) = value {
-                translations.insert(key, text);
-            }
+        if let Ok(fr_trans) = serde_json::from_str(fr_json) {
+            map.insert(Language::French, fr_trans);
         }
-    }
-    
-    Ok(translations)
-}
+        
+        map
+    });
 
 #[derive(Debug, Clone)]
 pub struct Translator {
@@ -72,22 +49,12 @@ impl Translator {
     }
 
     pub fn set_language(&mut self, language: Language) -> Result<(), Box<dyn std::error::Error>> {
-        if language == Language::English {
+        if TRANSLATIONS.contains_key(&language) {
             self.current_language = language;
-            return Ok(());
+            Ok(())
+        } else {
+            Err("Langue non disponible".into())
         }
-
-        let mut translations = TRANSLATIONS.write().unwrap();
-        if !translations.contains_key(&language) {
-            if let Ok(trans) = load_language_file(language) {
-                translations.insert(language, trans);
-            } else {
-                return Err("Impossible de charger le fichier de langue".into());
-            }
-        }
-
-        self.current_language = language;
-        Ok(())
     }
 
     pub fn get_language(&self) -> Language {
@@ -95,16 +62,14 @@ impl Translator {
     }
 
     pub fn translate(&self, key: &str) -> String {
-        let translations = TRANSLATIONS.read().unwrap();
-        
-        if let Some(trans) = translations.get(&self.current_language) {
+        if let Some(trans) = TRANSLATIONS.get(&self.current_language) {
             if let Some(text) = trans.get(key) {
                 return text.clone();
             }
         }
 
         if self.current_language != Language::English {
-            if let Some(en_trans) = translations.get(&Language::English) {
+            if let Some(en_trans) = TRANSLATIONS.get(&Language::English) {
                 if let Some(text) = en_trans.get(key) {
                     return text.clone();
                 }
