@@ -3,7 +3,6 @@ members = [
     "crates/hot-reload-watcher",
     "crates/hot-reload-ui",
     "crates/hot-reload-common",
-    "crates/hot-reload-keygen",
     "crates/hot-reload-build"
 ]
 resolver = "2"
