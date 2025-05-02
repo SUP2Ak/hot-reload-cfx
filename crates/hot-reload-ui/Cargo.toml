@@ -4,6 +4,15 @@ version = "0.1.0"
 author = "SUP2Ak"
 edition = "2021"
 
+# Configuration Windows spécifique
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["wincon"] }
+
+[[bin]]
+name = "hot-reload-ui"
+path = "src/main.rs"
+windows_subsystem = "windows"
+
 [dependencies]
 hot-reload-common = { path = "../hot-reload-common" }
 eframe = "0.26"
