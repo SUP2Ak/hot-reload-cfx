@@ -17,9 +17,12 @@ jobs:
         run: cargo build --package hot-reload-watcher --release
       
       - name: Generate Windows Version Files
+        shell: bash
         run: |
-          echo "{\"version\": \"$(cargo metadata --format-version=1 | jq -r '.packages[] | select(.name == \"hot-reload-watcher\") | .version')\"}" > version.watcher.json
-          echo "{\"version\": \"$(cargo metadata --format-version=1 | jq -r '.packages[] | select(.name == \"hot-reload-ui\") | .version')\"}" > version.ui.json
+          WATCHER_VERSION=$(cargo metadata --format-version=1 | jq -r '.packages[] | select(.name == "hot-reload-watcher") | .version')
+          UI_VERSION=$(cargo metadata --format-version=1 | jq -r '.packages[] | select(.name == "hot-reload-ui") | .version')
+          echo "{\"version\": \"$WATCHER_VERSION\"}" > version.watcher.json
+          echo "{\"version\": \"$UI_VERSION\"}" > version.ui.json
       
       - uses: actions/upload-artifact@master
         with:
