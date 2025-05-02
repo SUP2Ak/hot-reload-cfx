@@ -1,0 +1,22 @@
+name: UI
+
+on:
+  push:
+    paths:
+      - 'crates/hot-reload-ui/**'
+      - '.github/workflows/ui.yml'
+  repository_dispatch:
+    types: [build-ui]
+  pull_request:
+    paths:
+      - 'crates/hot-reload-ui/**'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build UI
+        run: cargo build --package hot-reload-ui --verbose
+      - name: Test UI
+        run: cargo test --package hot-reload-ui --verbose 

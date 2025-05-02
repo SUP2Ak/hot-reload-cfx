@@ -1,0 +1,25 @@
+name: Watcher
+
+on:
+  push:
+    paths:
+      - 'crates/hot-reload-watcher/**'
+      - '.github/workflows/watcher.yml'
+  repository_dispatch:
+    types: [build-watcher]
+  pull_request:
+    paths:
+      - 'crates/hot-reload-watcher/**'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Watcher
+        run: cargo build --package hot-reload-watcher --verbose
+      - name: Test Watcher
+        run: cargo test --package hot-reload-watcher --verbose 

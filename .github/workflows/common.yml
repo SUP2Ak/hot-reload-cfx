@@ -1,0 +1,23 @@
+name: Common
+
+on:
+  push:
+    paths:
+      - 'crates/hot-reload-common/**'
+      - '.github/workflows/common.yml'
+  pull_request:
+    paths:
+      - 'crates/hot-reload-common/**'
+
+jobs:
+  trigger-dependent:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger UI workflow
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          event-type: build-ui
+      - name: Trigger Watcher workflow
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          event-type: build-watcher 

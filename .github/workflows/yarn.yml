@@ -2,12 +2,12 @@ name: yarn Build Check
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "dev" ]
     paths:
       - 'resources/hot-reload/**'
       - '.github/workflows/yarn.yml'
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "dev" ]
   workflow_dispatch:  # Permet de lancer manuellement
 
 jobs:
