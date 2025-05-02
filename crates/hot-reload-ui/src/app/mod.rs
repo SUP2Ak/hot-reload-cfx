@@ -206,9 +206,9 @@ impl HotReloadApp {
         }
     }
 
-    fn set_is_connected(&mut self, is_connected: bool) {
-        self.is_connected = is_connected;
-    }
+    // fn set_is_connected(&mut self, is_connected: bool) {
+    //     self.is_connected = is_connected;
+    // }
 
     fn start_websocket(&mut self, ws_url: String, api_key: Option<String>) {
         let rt = self.runtime.clone();
