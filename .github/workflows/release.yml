@@ -4,6 +4,9 @@ on:
   release:
     types: [created]
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -28,8 +31,7 @@ jobs:
         with:
           name: windows-artifacts
           path: |
-            target/release/hot-reload-ui.exe
-            target/release/hot-reload-watcher.exe
+            target/release/*.exe
             version.*.json
 
   build-linux:
@@ -88,13 +90,14 @@ jobs:
           echo "{\"version\": \"$(jq -r '.version' resources/hot-reload/package.json)\"}" > version.fxserver.json
 
       - uses: actions/download-artifact@master
+        with:
+          path: artifacts
 
       - uses: softprops/action-gh-release@v1
         with:
           files: |
-            windows-artifacts/hot-reload-ui.exe
-            windows-artifacts/hot-reload-watcher.exe
-            windows-artifacts/version.*.json
-            linux-artifacts/hot-reload-watcher
+            artifacts/windows-artifacts/*.exe
+            artifacts/windows-artifacts/version.*.json
+            artifacts/linux-artifacts/hot-reload-watcher
             hot-reload-fxserver.zip
             version.fxserver.json 
