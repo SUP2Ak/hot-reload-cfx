@@ -21,8 +21,7 @@ jobs:
           echo "{\"version\": \"$(cargo metadata --format-version=1 | jq -r '.packages[] | select(.name == \"hot-reload-watcher\") | .version')\"}" > version.watcher.json
           echo "{\"version\": \"$(cargo metadata --format-version=1 | jq -r '.packages[] | select(.name == \"hot-reload-ui\") | .version')\"}" > version.ui.json
       
-      - name: Upload Windows Artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v3
         with:
           name: windows-artifacts
           path: |
@@ -38,8 +37,7 @@ jobs:
       - name: Build Watcher Linux
         run: cargo build --package hot-reload-watcher --release
       
-      - name: Upload Linux Artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v3
         with:
           name: linux-artifacts
           path: target/release/hot-reload-watcher
@@ -50,8 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '16'
       
@@ -65,11 +62,9 @@ jobs:
         run: |
           echo "{\"version\": \"$(jq -r '.version' resources/hot-reload/package.json)\"}" > version.fxserver.json
 
-      - name: Download All Artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v3
 
-      - name: Upload Release Assets
-        uses: softprops/action-gh-release@v1
+      - uses: softprops/action-gh-release@v1
         with:
           files: |
             windows-artifacts/hot-reload-ui.exe
