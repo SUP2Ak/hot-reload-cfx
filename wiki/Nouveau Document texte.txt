@@ -1,0 +1,28 @@
+my-watcher/
+├── Cargo.toml
+├── src/
+│   ├── main.rs                 # Point d'entrée, configuration
+│   ├── lib.rs                  # Exports publics
+│   ├── error.rs                # Gestion des erreurs centralisée
+│   ├── config/
+│   │   ├── mod.rs             # Export des configs
+│   │   └── watcher.rs         # WatcherConfig
+│   ├── connections/
+│   │   ├── mod.rs             # Export des connexions
+│   │   ├── fivem.rs           # FiveMConnection
+│   │   └── websocket.rs       # UI WebSocket handling
+│   ├── watcher/
+│   │   ├── mod.rs             # Export du watcher
+│   │   ├── resource.rs        # ResourceWatcher core
+│   │   ├── file.rs            # File watching logic
+│   │   └── handler.rs         # Change handling logic
+│   ├── models/
+│   │   ├── mod.rs             # Export des modèles
+│   │   ├── resource.rs        # Resource related structs
+│   │   └── changes.rs         # Change related structs
+│   └── utils/
+│       ├── mod.rs             # Export des utilitaires
+│       ├── paths.rs           # Path manipulation
+│       └── filters.rs         # File/folder filters
+└── migrations/
+    └── ...
