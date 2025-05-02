@@ -21,7 +21,7 @@ jobs:
           echo "{\"version\": \"$(cargo metadata --format-version=1 | jq -r '.packages[] | select(.name == \"hot-reload-watcher\") | .version')\"}" > version.watcher.json
           echo "{\"version\": \"$(cargo metadata --format-version=1 | jq -r '.packages[] | select(.name == \"hot-reload-ui\") | .version')\"}" > version.ui.json
       
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@master
         with:
           name: windows-artifacts
           path: |
@@ -37,7 +37,7 @@ jobs:
       - name: Build Watcher Linux
         run: cargo build --package hot-reload-watcher --release
       
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@master
         with:
           name: linux-artifacts
           path: target/release/hot-reload-watcher
@@ -62,7 +62,7 @@ jobs:
         run: |
           echo "{\"version\": \"$(jq -r '.version' resources/hot-reload/package.json)\"}" > version.fxserver.json
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@master
 
       - uses: softprops/action-gh-release@v1
         with:
