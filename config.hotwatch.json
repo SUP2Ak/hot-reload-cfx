@@ -1,0 +1,7 @@
+{
+  "ws_host": "localhost",
+  "ws_port": 3090,
+  "fxserver_port": 3091,
+  "resources_path": "",
+  "api_key": ""
+}
